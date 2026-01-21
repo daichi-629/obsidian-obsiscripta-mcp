@@ -1,6 +1,7 @@
 import { createRequire } from "module";
 import path from "path";
 import { MCPToolContext, MCPToolDefinition } from "../types";
+import { getPlugin } from "../../utils/plugin-access";
 
 type RequireFn = (id: string) => unknown;
 
@@ -9,6 +10,8 @@ export class ScriptExecutor {
 		const module = { exports: {} as Record<string, unknown> };
 		const localRequire = this.createLocalRequire(scriptPath, context);
 		const dirname = this.getDirname(scriptPath);
+		const dataviewPlugin = getPlugin(context.app, "dataview") as { api?: unknown } | undefined;
+		const dv = dataviewPlugin?.api;
 		// eslint-disable-next-line @typescript-eslint/no-implied-eval
 		const runner = new Function(
 			"module",
@@ -19,6 +22,7 @@ export class ScriptExecutor {
 			"app",
 			"vault",
 			"plugin",
+			"dv",
 			code
 		);
 		// eslint-disable-next-line @typescript-eslint/no-unsafe-call
@@ -30,7 +34,8 @@ export class ScriptExecutor {
 			dirname,
 			context.app,
 			context.vault,
-			context.plugin
+			context.plugin,
+			dv
 		);
 
 		const rawExports = module.exports as { default?: unknown } | undefined;
