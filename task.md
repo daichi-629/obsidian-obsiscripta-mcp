@@ -43,11 +43,17 @@
 6. Test with Claude Desktop
 
 **Success Criteria**:
-- [ ] Server starts on plugin load
-- [ ] `read_note` tool appears in Claude Desktop
-- [ ] Tool executes successfully
-- [ ] 複数セッションが同時に動作する
-- [ ] セッション終了時にクリーンアップされる
+- [x] Server starts on plugin load
+- [x] `read_note` tool appears in MCP Inspector
+- [x] Tool executes successfully
+- [x] 複数セッションが同時に動作する
+- [x] セッション終了時にクリーンアップされる
+
+**Status**: ✅ **COMPLETED** (2026-01-22)
+- Verified with MCP Inspector
+- All endpoints (POST/GET/DELETE /mcp) working correctly
+- Session management functional
+- read_note tool successfully reads vault notes
 
 **Critical Files**:
 - `package.json` - Add MCP SDK dependency
@@ -197,6 +203,10 @@ After implementation, verify:
 
 ---
 
-## Current Phase: Phase 1
+## Current Phase: Phase 2 - Script Extension System
 
-Focus on getting the minimal MCP server running with one tool to validate the approach.
+**Previous Phase (Phase 1)**: ✅ Completed - Minimal MCP server with read_note tool verified with MCP Inspector
+
+**Current Focus**: Implement script extension system to allow users to create custom tools in JavaScript/TypeScript
+
+**Priority**: HIGH - This is the most valuable feature for extensibility

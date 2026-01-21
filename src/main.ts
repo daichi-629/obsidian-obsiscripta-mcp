@@ -1,99 +1,91 @@
-import {App, Editor, MarkdownView, Modal, Notice, Plugin} from 'obsidian';
-import {DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab} from "./settings";
+import { Notice, Plugin } from "obsidian";
+import { DEFAULT_SETTINGS, MCPPluginSettings, MCPSettingTab } from "./settings";
+import { MCPServer } from "./mcp/server";
+import { ToolRegistry } from "./mcp/tools/registry";
+import { getBuiltinNoteTools } from "./mcp/tools/builtin/notes";
 
-// Remember to rename these classes and interfaces!
-
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+export default class MCPPlugin extends Plugin {
+	settings: MCPPluginSettings;
+	private mcpServer: MCPServer | null = null;
+	private toolRegistry: ToolRegistry;
 
 	async onload() {
 		await this.loadSettings();
 
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
+		// Initialize tool registry
+		this.toolRegistry = new ToolRegistry();
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
+		// Register built-in tools
+		for (const tool of getBuiltinNoteTools()) {
+			this.toolRegistry.register(tool);
+		}
 
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				editor.replaceSelection('Sample editor command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
+		// Initialize and start MCP server
+		this.mcpServer = new MCPServer(this, this.toolRegistry, this.settings.port);
 
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-				return false;
+		try {
+			await this.mcpServer.start();
+			new Notice(`MCP Server started on port ${this.settings.port}`);
+		} catch (error) {
+			console.error("[MCP] Failed to start server:", error);
+			new Notice(`Failed to start MCP server: ${error instanceof Error ? error.message : String(error)}`);
+		}
+
+		// Add settings tab
+		this.addSettingTab(new MCPSettingTab(this.app, this));
+
+		// Add ribbon icon for server status
+		this.addRibbonIcon("server", "MCP Server", () => {
+			if (this.mcpServer?.isRunning()) {
+				new Notice(`MCP Server running on port ${this.settings.port}\nActive sessions: ${this.mcpServer.getSessionCount()}`);
+			} else {
+				new Notice("MCP Server is not running");
 			}
 		});
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			new Notice("Click");
+		// Add command to restart server
+		this.addCommand({
+			id: "restart-server",
+			name: "Restart MCP server",
+			callback: async () => {
+				await this.restartServer();
+			}
 		});
 
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
-
+		console.log(`[MCP] Plugin loaded. Tools registered: ${this.toolRegistry.size}`);
 	}
 
-	onunload() {
+	async onunload() {
+		if (this.mcpServer) {
+			await this.mcpServer.stop();
+			console.log("[MCP] Server stopped on plugin unload");
+		}
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<MyPluginSettings>);
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<MCPPluginSettings>);
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
 	}
-}
 
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
+	/**
+	 * Restart the MCP server (useful after settings change)
+	 */
+	async restartServer(): Promise<void> {
+		if (this.mcpServer) {
+			await this.mcpServer.stop();
+		}
 
-	onOpen() {
-		let {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
+		this.mcpServer = new MCPServer(this, this.toolRegistry, this.settings.port);
 
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
+		try {
+			await this.mcpServer.start();
+			new Notice(`MCP Server restarted on port ${this.settings.port}`);
+		} catch (error) {
+			console.error("[MCP] Failed to restart server:", error);
+			new Notice(`Failed to restart MCP server: ${error instanceof Error ? error.message : String(error)}`);
+		}
 	}
 }
