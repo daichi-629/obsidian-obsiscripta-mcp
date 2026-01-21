@@ -3,11 +3,15 @@ import { DEFAULT_SETTINGS, MCPPluginSettings, MCPSettingTab } from "./settings";
 import { MCPServer } from "./mcp/server";
 import { ToolRegistry } from "./mcp/tools/registry";
 import { getBuiltinNoteTools } from "./mcp/tools/builtin/notes";
+import { ScriptLoader } from "./mcp/tools/scripting/script-loader";
+import { ExampleManager } from "./mcp/tools/scripting/example-manager";
 
 export default class MCPPlugin extends Plugin {
 	settings: MCPPluginSettings;
 	private mcpServer: MCPServer | null = null;
 	private toolRegistry: ToolRegistry;
+	private scriptLoader: ScriptLoader | null = null;
+	private exampleManager: ExampleManager | null = null;
 
 	async onload() {
 		await this.loadSettings();
@@ -18,6 +22,15 @@ export default class MCPPlugin extends Plugin {
 		// Register built-in tools
 		for (const tool of getBuiltinNoteTools()) {
 			this.toolRegistry.register(tool);
+		}
+
+		// Load custom script tools
+		this.scriptLoader = new ScriptLoader(this, this.toolRegistry);
+		this.exampleManager = new ExampleManager(this, this.scriptLoader.getScriptsPathValue());
+		try {
+			await this.scriptLoader.start();
+		} catch (error) {
+			console.error("[MCP] Failed to start script loader:", error);
 		}
 
 		// Initialize and start MCP server
@@ -32,7 +45,7 @@ export default class MCPPlugin extends Plugin {
 		}
 
 		// Add settings tab
-		this.addSettingTab(new MCPSettingTab(this.app, this));
+		this.addSettingTab(new MCPSettingTab(this.app, this, this.exampleManager));
 
 		// Add ribbon icon for server status
 		this.addRibbonIcon("server", "MCP Server", () => {
@@ -56,6 +69,12 @@ export default class MCPPlugin extends Plugin {
 	}
 
 	async onunload() {
+		if (this.scriptLoader) {
+			this.scriptLoader.stop();
+			this.scriptLoader = null;
+		}
+		this.exampleManager = null;
+
 		if (this.mcpServer) {
 			await this.mcpServer.stop();
 			console.log("[MCP] Server stopped on plugin unload");

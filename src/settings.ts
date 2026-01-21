@@ -1,5 +1,6 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import MCPPlugin from "./main";
+import { ExampleManager } from "./mcp/tools/scripting/example-manager";
 
 export interface MCPPluginSettings {
 	port: number;
@@ -13,10 +14,12 @@ export const DEFAULT_SETTINGS: MCPPluginSettings = {
 
 export class MCPSettingTab extends PluginSettingTab {
 	plugin: MCPPlugin;
+	private exampleManager: ExampleManager | null;
 
-	constructor(app: App, plugin: MCPPlugin) {
+	constructor(app: App, plugin: MCPPlugin, exampleManager: ExampleManager | null) {
 		super(app, plugin);
 		this.plugin = plugin;
+		this.exampleManager = exampleManager;
 	}
 
 	display(): void {
@@ -62,6 +65,19 @@ export class MCPSettingTab extends PluginSettingTab {
 				.setButtonText("Restart")
 				.onClick(async () => {
 					await this.plugin.restartServer();
+				}));
+
+		new Setting(containerEl)
+			.setName("Example script")
+			.setDesc("Copy the bundled example tool into .obsidian/mcp-tools/")
+			.addButton(button => button
+				.setButtonText("Copy")
+				.setDisabled(!this.exampleManager)
+				.onClick(async () => {
+					if (!this.exampleManager) {
+						return;
+					}
+					await this.exampleManager.copyExampleToScripts();
 				}));
 
 		// Server info section
