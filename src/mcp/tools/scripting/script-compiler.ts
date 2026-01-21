@@ -16,7 +16,7 @@ export class ScriptCompiler {
 			return cached.code;
 		}
 
-		const transforms = loader === "ts"
+		const transforms: Array<"typescript" | "imports"> = loader === "ts"
 			? ["typescript", "imports"]
 			: ["imports"];
 		const result = transform(source, {

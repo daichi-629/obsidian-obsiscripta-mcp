@@ -14,7 +14,7 @@ export class ToolRegistry {
 			console.warn(`[MCP] Tool "${tool.name}" already registered, overwriting`);
 		}
 		this.tools.set(tool.name, tool);
-		console.log(`[MCP] Registered tool: ${tool.name}`);
+		console.debug(`[MCP] Registered tool: ${tool.name}`);
 	}
 
 	/**
@@ -23,7 +23,7 @@ export class ToolRegistry {
 	unregister(name: string): boolean {
 		const deleted = this.tools.delete(name);
 		if (deleted) {
-			console.log(`[MCP] Unregistered tool: ${name}`);
+			console.debug(`[MCP] Unregistered tool: ${name}`);
 		}
 		return deleted;
 	}
@@ -61,6 +61,6 @@ export class ToolRegistry {
 	 */
 	clear(): void {
 		this.tools.clear();
-		console.log("[MCP] Cleared all tools");
+		console.debug("[MCP] Cleared all tools");
 	}
 }

@@ -27,26 +27,24 @@ export class MCPSettingTab extends PluginSettingTab {
 
 		containerEl.empty();
 
-		containerEl.createEl("h2", { text: "MCP Server Settings" });
+		new Setting(containerEl)
+			.setName("Server")
+			.setHeading();
 
 		// Warning notice
-		const warningEl = containerEl.createEl("div", { cls: "mod-warning" });
-		warningEl.style.padding = "10px";
-		warningEl.style.marginBottom = "15px";
-		warningEl.style.backgroundColor = "var(--background-modifier-error)";
-		warningEl.style.borderRadius = "5px";
+		const warningEl = containerEl.createEl("div", { cls: "mod-warning mcp-settings-warning" });
 		warningEl.createEl("p", {
-			text: "⚠️ Desktop only - This plugin does not work on mobile.",
-			attr: { style: "margin: 0 0 5px 0; font-weight: bold;" }
+			text: "Warning: desktop only. This plugin does not work on mobile.",
+			cls: "mcp-settings-warning-title"
 		});
 		warningEl.createEl("p", {
-			text: "⚠️ The MCP server binds to localhost only (127.0.0.1). No authentication is required.",
-			attr: { style: "margin: 0;" }
+			text: "Warning: the server binds to localhost only (127.0.0.1). No authentication is required.",
+			cls: "mcp-settings-warning-body"
 		});
 
 		new Setting(containerEl)
 			.setName("Port")
-			.setDesc("The port number for the MCP server (requires restart)")
+			.setDesc("The port number for the server (requires restart)")
 			.addText(text => text
 				.setPlaceholder("3000")
 				.setValue(String(this.plugin.settings.port))
@@ -60,7 +58,7 @@ export class MCPSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Restart server")
-			.setDesc("Restart the MCP server to apply port changes")
+			.setDesc("Restart the server to apply port changes")
 			.addButton(button => button
 				.setButtonText("Restart")
 				.onClick(async () => {
@@ -69,7 +67,7 @@ export class MCPSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Example script")
-			.setDesc("Copy the bundled example tool into .obsidian/mcp-tools/")
+			.setDesc("Copy the bundled example tool into the config folder (mcp-tools/)")
 			.addButton(button => button
 				.setButtonText("Copy")
 				.setDisabled(!this.exampleManager)
@@ -81,30 +79,23 @@ export class MCPSettingTab extends PluginSettingTab {
 				}));
 
 		// Server info section
-		containerEl.createEl("h3", { text: "Connection Info" });
+		new Setting(containerEl)
+			.setName("Connection info")
+			.setHeading();
 
-		const infoEl = containerEl.createEl("div");
-		infoEl.style.padding = "10px";
-		infoEl.style.backgroundColor = "var(--background-secondary)";
-		infoEl.style.borderRadius = "5px";
-		infoEl.style.fontFamily = "monospace";
+		const infoEl = containerEl.createEl("div", { cls: "mcp-settings-info" });
 
 		infoEl.createEl("p", {
 			text: `Endpoint: http://127.0.0.1:${this.plugin.settings.port}/mcp`,
-			attr: { style: "margin: 0 0 10px 0;" }
+			cls: "mcp-settings-info-line"
 		});
 
 		infoEl.createEl("p", {
-			text: "Claude Desktop config:",
-			attr: { style: "margin: 0 0 5px 0; font-weight: bold;" }
+			text: "Claude desktop config:",
+			cls: "mcp-settings-info-label"
 		});
 
-		const codeEl = infoEl.createEl("pre");
-		codeEl.style.margin = "0";
-		codeEl.style.padding = "10px";
-		codeEl.style.backgroundColor = "var(--background-primary)";
-		codeEl.style.borderRadius = "3px";
-		codeEl.style.overflow = "auto";
+		const codeEl = infoEl.createEl("pre", { cls: "mcp-settings-code" });
 
 		const configJson = {
 			mcpServers: {

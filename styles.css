@@ -1,8 +1,44 @@
 /*
-
 This CSS file will be included with your plugin, and
 available in the app when your plugin is enabled.
-
-If your plugin does not need CSS, delete this file.
-
 */
+
+.mcp-settings-warning {
+	padding: 10px;
+	margin-bottom: 15px;
+	background-color: var(--background-modifier-error);
+	border-radius: 5px;
+}
+
+.mcp-settings-warning-title {
+	margin: 0 0 5px 0;
+	font-weight: 600;
+}
+
+.mcp-settings-warning-body {
+	margin: 0;
+}
+
+.mcp-settings-info {
+	padding: 10px;
+	background-color: var(--background-secondary);
+	border-radius: 5px;
+	font-family: var(--font-monospace);
+}
+
+.mcp-settings-info-line {
+	margin: 0 0 10px 0;
+}
+
+.mcp-settings-info-label {
+	margin: 0 0 5px 0;
+	font-weight: 600;
+}
+
+.mcp-settings-code {
+	margin: 0;
+	padding: 10px;
+	background-color: var(--background-primary);
+	border-radius: 3px;
+	overflow: auto;
+}

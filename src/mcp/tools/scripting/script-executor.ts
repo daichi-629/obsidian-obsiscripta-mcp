@@ -1,10 +1,15 @@
+import { createRequire } from "module";
+import path from "path";
 import { MCPToolContext, MCPToolDefinition } from "../types";
+
+type RequireFn = (id: string) => unknown;
 
 export class ScriptExecutor {
 	execute(code: string, scriptPath: string, context: MCPToolContext): MCPToolDefinition {
 		const module = { exports: {} as Record<string, unknown> };
-		const localRequire = this.getGlobalRequire();
+		const localRequire = this.createLocalRequire(scriptPath, context);
 		const dirname = this.getDirname(scriptPath);
+		// eslint-disable-next-line @typescript-eslint/no-implied-eval
 		const runner = new Function(
 			"module",
 			"exports",
@@ -16,6 +21,7 @@ export class ScriptExecutor {
 			"plugin",
 			code
 		);
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-call
 		runner(
 			module,
 			module.exports,
@@ -38,12 +44,32 @@ export class ScriptExecutor {
 		return tool as MCPToolDefinition;
 	}
 
-	private getGlobalRequire(): NodeRequire | undefined {
-		if (typeof require !== "undefined") {
-			return require;
+	private createLocalRequire(scriptPath: string, context: MCPToolContext): RequireFn | undefined {
+		const globalRequire = this.getGlobalRequire();
+		if (!globalRequire) {
+			return undefined;
 		}
-		const globalRequire = (globalThis as { require?: NodeRequire }).require;
-		return globalRequire;
+		const adapter = context.vault.adapter as { getBasePath?: () => string };
+		const basePath = adapter.getBasePath?.();
+		if (!basePath) {
+			return globalRequire;
+		}
+		const absoluteScriptPath = path.isAbsolute(scriptPath)
+			? scriptPath
+			: path.join(basePath, scriptPath);
+		try {
+			return createRequire(absoluteScriptPath) as unknown as RequireFn;
+		} catch {
+			return globalRequire;
+		}
+	}
+
+	private getGlobalRequire(): RequireFn | undefined {
+		const globalRequire = (globalThis as { require?: unknown }).require;
+		if (typeof globalRequire === "function") {
+			return globalRequire as RequireFn;
+		}
+		return undefined;
 	}
 
 	private getDirname(scriptPath: string): string {

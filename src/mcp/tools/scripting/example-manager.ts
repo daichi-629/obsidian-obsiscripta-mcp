@@ -55,13 +55,13 @@ export class ExampleManager {
 
 	private getExampleSourcePath(): string | null {
 		const configDir = this.plugin.app.vault.configDir;
-		const safeConfigDir = typeof configDir === "string" && configDir.length > 0
-			? configDir
-			: ".obsidian";
+		if (!configDir) {
+			return null;
+		}
 		const pluginId = this.plugin.manifest?.id;
 		if (!pluginId) {
 			return null;
 		}
-		return `${safeConfigDir}/plugins/${pluginId}/examples/${EXAMPLE_SCRIPT_NAME}`;
+		return `${configDir}/plugins/${pluginId}/examples/${EXAMPLE_SCRIPT_NAME}`;
 	}
 }

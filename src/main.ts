@@ -38,7 +38,7 @@ export default class MCPPlugin extends Plugin {
 
 		try {
 			await this.mcpServer.start();
-			new Notice(`MCP Server started on port ${this.settings.port}`);
+			new Notice(`MCP server started on port ${this.settings.port}`);
 		} catch (error) {
 			console.error("[MCP] Failed to start server:", error);
 			new Notice(`Failed to start MCP server: ${error instanceof Error ? error.message : String(error)}`);
@@ -48,27 +48,31 @@ export default class MCPPlugin extends Plugin {
 		this.addSettingTab(new MCPSettingTab(this.app, this, this.exampleManager));
 
 		// Add ribbon icon for server status
-		this.addRibbonIcon("server", "MCP Server", () => {
+		this.addRibbonIcon("server", "Server status", () => {
 			if (this.mcpServer?.isRunning()) {
-				new Notice(`MCP Server running on port ${this.settings.port}\nActive sessions: ${this.mcpServer.getSessionCount()}`);
+				new Notice(`Server running on port ${this.settings.port}\nActive sessions: ${this.mcpServer.getSessionCount()}`);
 			} else {
-				new Notice("MCP Server is not running");
+				new Notice("Server is not running");
 			}
 		});
 
 		// Add command to restart server
 		this.addCommand({
 			id: "restart-server",
-			name: "Restart MCP server",
-			callback: async () => {
-				await this.restartServer();
+			name: "Restart server",
+			callback: () => {
+				void this.restartServer();
 			}
 		});
 
-		console.log(`[MCP] Plugin loaded. Tools registered: ${this.toolRegistry.size}`);
+		console.debug(`[MCP] Plugin loaded. Tools registered: ${this.toolRegistry.size}`);
 	}
 
-	async onunload() {
+	onunload(): void {
+		void this.handleUnload();
+	}
+
+	private async handleUnload(): Promise<void> {
 		if (this.scriptLoader) {
 			this.scriptLoader.stop();
 			this.scriptLoader = null;
@@ -77,7 +81,7 @@ export default class MCPPlugin extends Plugin {
 
 		if (this.mcpServer) {
 			await this.mcpServer.stop();
-			console.log("[MCP] Server stopped on plugin unload");
+			console.debug("[MCP] Server stopped on plugin unload");
 		}
 	}
 
@@ -101,7 +105,7 @@ export default class MCPPlugin extends Plugin {
 
 		try {
 			await this.mcpServer.start();
-			new Notice(`MCP Server restarted on port ${this.settings.port}`);
+			new Notice(`MCP server restarted on port ${this.settings.port}`);
 		} catch (error) {
 			console.error("[MCP] Failed to restart server:", error);
 			new Notice(`Failed to restart MCP server: ${error instanceof Error ? error.message : String(error)}`);

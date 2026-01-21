@@ -11,6 +11,7 @@ export class ScriptLoader {
 	private compiler: ScriptCompiler;
 	private executor: ScriptExecutor;
 	private scriptTools: Map<string, string> = new Map();
+	private toolNameCounts: Map<string, number> = new Map();
 	private reloadTimer: number | null = null;
 	private scriptsPath: string;
 
@@ -34,19 +35,20 @@ export class ScriptLoader {
 			this.reloadTimer = null;
 		}
 
-		for (const toolName of this.scriptTools.values()) {
+		for (const toolName of this.toolNameCounts.keys()) {
 			this.toolRegistry.unregister(toolName);
 		}
 		this.scriptTools.clear();
+		this.toolNameCounts.clear();
 		this.compiler.clear();
 	}
 
 	private computeScriptsPath(): string {
 		const configDir = this.plugin.app.vault.configDir;
-		const safeConfigDir = typeof configDir === "string" && configDir.length > 0
-			? configDir
-			: ".obsidian";
-		return `${safeConfigDir}/${SCRIPT_FOLDER_NAME}`;
+		if (!configDir) {
+			return "";
+		}
+		return `${configDir}/${SCRIPT_FOLDER_NAME}`;
 	}
 
 	private async ensureScriptsFolder(): Promise<void> {
@@ -57,20 +59,29 @@ export class ScriptLoader {
 		const exists = await adapter.exists(this.scriptsPath);
 		if (!exists) {
 			await adapter.mkdir(this.scriptsPath);
-			console.log(`[MCP] Created script folder: ${this.scriptsPath}`);
+			console.debug(`[MCP] Created script folder: ${this.scriptsPath}`);
 		}
 	}
 
 
 	private startWatching(): void {
-		const watchEvents: Array<"create" | "modify" | "delete"> = ["create", "modify", "delete"];
-		for (const eventName of watchEvents) {
-			this.plugin.registerEvent(this.plugin.app.vault.on(eventName, (file) => {
-				if (this.isScriptFile(file?.path)) {
-					this.scheduleReload();
-				}
-			}));
-		}
+		this.plugin.registerEvent(this.plugin.app.vault.on("create", (file) => {
+			if (this.isScriptFile(file?.path)) {
+				this.scheduleReload();
+			}
+		}));
+
+		this.plugin.registerEvent(this.plugin.app.vault.on("modify", (file) => {
+			if (this.isScriptFile(file?.path)) {
+				this.scheduleReload();
+			}
+		}));
+
+		this.plugin.registerEvent(this.plugin.app.vault.on("delete", (file) => {
+			if (this.isScriptFile(file?.path)) {
+				this.scheduleReload();
+			}
+		}));
 
 		this.plugin.registerEvent(this.plugin.app.vault.on("rename", (file, oldPath) => {
 			if (this.isScriptFile(file?.path) || this.isScriptPath(oldPath)) {
@@ -100,10 +111,8 @@ export class ScriptLoader {
 
 		for (const [scriptPath, toolName] of this.scriptTools.entries()) {
 			if (!scriptSet.has(scriptPath)) {
-				this.toolRegistry.unregister(toolName);
-				this.scriptTools.delete(scriptPath);
-				this.compiler.invalidate(scriptPath);
-				console.log(`[MCP] Removed script tool: ${toolName}`);
+				this.unregisterScriptTool(scriptPath);
+				console.debug(`[MCP] Removed script tool: ${toolName}`);
 			}
 		}
 	}
@@ -125,17 +134,49 @@ export class ScriptLoader {
 			this.registerScriptTool(scriptPath, tool);
 		} catch (error) {
 			console.error(`[MCP] Failed to load script ${scriptPath}:`, error);
+			this.unregisterScriptTool(scriptPath);
 		}
 	}
 
 	private registerScriptTool(scriptPath: string, tool: MCPToolDefinition): void {
 		const existingToolName = this.scriptTools.get(scriptPath);
 		if (existingToolName && existingToolName !== tool.name) {
-			this.toolRegistry.unregister(existingToolName);
+			this.decrementToolRef(existingToolName);
 		}
 
 		this.toolRegistry.register(tool);
 		this.scriptTools.set(scriptPath, tool.name);
+		if (!existingToolName || existingToolName !== tool.name) {
+			this.incrementToolRef(tool.name);
+		}
+	}
+
+	private unregisterScriptTool(scriptPath: string): void {
+		const toolName = this.scriptTools.get(scriptPath);
+		if (!toolName) {
+			return;
+		}
+		this.scriptTools.delete(scriptPath);
+		this.compiler.invalidate(scriptPath);
+		this.decrementToolRef(toolName);
+	}
+
+	private incrementToolRef(toolName: string): void {
+		const count = this.toolNameCounts.get(toolName) ?? 0;
+		this.toolNameCounts.set(toolName, count + 1);
+	}
+
+	private decrementToolRef(toolName: string): void {
+		const count = this.toolNameCounts.get(toolName);
+		if (count === undefined) {
+			return;
+		}
+		if (count <= 1) {
+			this.toolNameCounts.delete(toolName);
+			this.toolRegistry.unregister(toolName);
+		} else {
+			this.toolNameCounts.set(toolName, count - 1);
+		}
 	}
 
 	private getLoaderForPath(filePath: string): "js" | "ts" | null {

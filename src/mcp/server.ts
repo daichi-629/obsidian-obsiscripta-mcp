@@ -82,11 +82,11 @@ export class MCPServer {
 	/**
 	 * Convert our JSON Schema format to Zod schema
 	 */
-	private convertToZodSchema(schema: MCPToolDefinition["inputSchema"]): Record<string, z.ZodTypeAny> {
-		const zodShape: Record<string, z.ZodTypeAny> = {};
+	private convertToZodSchema(schema: MCPToolDefinition["inputSchema"]): Record<string, z.ZodType> {
+		const zodShape: Record<string, z.ZodType> = {};
 
 		for (const [key, propSchema] of Object.entries(schema.properties)) {
-			let zodType: z.ZodTypeAny;
+			let zodType: z.ZodType;
 
 			switch (propSchema.type) {
 				case "string":
@@ -222,7 +222,7 @@ export class MCPServer {
 				// Store the session when initialized
 				const mcpServer = this.createMcpServer();
 				this.sessions.set(sessionId, { transport, mcpServer });
-				console.log(`[MCP] Session initialized: ${sessionId}`);
+				console.debug(`[MCP] Session initialized: ${sessionId}`);
 
 				// Connect the server to the transport
 				mcpServer.connect(transport).catch((error) => {
@@ -236,7 +236,7 @@ export class MCPServer {
 			const sessionId = transport.sessionId;
 			if (sessionId && this.sessions.has(sessionId)) {
 				this.sessions.delete(sessionId);
-				console.log(`[MCP] Session closed: ${sessionId}`);
+				console.debug(`[MCP] Session closed: ${sessionId}`);
 			}
 		};
 
@@ -310,22 +310,27 @@ export class MCPServer {
 		}
 
 		return new Promise((resolve, reject) => {
+			const isErrnoLike = (value: unknown): value is { code?: string } => {
+				return typeof value === "object" && value !== null && "code" in value;
+			};
+
 			this.httpServer = createServer((req, res) => {
 				this.handleRequest(req, res).catch((error) => {
 					console.error("[MCP] Unhandled error:", error);
 				});
 			});
 
-			this.httpServer.on("error", (error: NodeJS.ErrnoException) => {
-				if (error.code === "EADDRINUSE") {
+			this.httpServer.on("error", (error: unknown) => {
+				const err = error instanceof Error ? error : new Error(String(error));
+				if (isErrnoLike(error) && error.code === "EADDRINUSE") {
 					reject(new Error(`Port ${this.port} is already in use. Please configure a different port in settings.`));
-				} else {
-					reject(error);
+					return;
 				}
+				reject(err);
 			});
 
 			this.httpServer.listen(this.port, "127.0.0.1", () => {
-				console.log(`[MCP] Server started on http://127.0.0.1:${this.port}/mcp`);
+				console.debug(`[MCP] Server started on http://127.0.0.1:${this.port}/mcp`);
 				resolve();
 			});
 		});
@@ -339,7 +344,7 @@ export class MCPServer {
 		for (const [sessionId, session] of this.sessions) {
 			try {
 				await session.transport.close();
-				console.log(`[MCP] Closed session: ${sessionId}`);
+				console.debug(`[MCP] Closed session: ${sessionId}`);
 			} catch (error) {
 				console.error(`[MCP] Error closing session ${sessionId}:`, error);
 			}
@@ -350,7 +355,7 @@ export class MCPServer {
 		if (this.httpServer) {
 			return new Promise((resolve) => {
 				this.httpServer!.close(() => {
-					console.log("[MCP] Server stopped");
+					console.debug("[MCP] Server stopped");
 					this.httpServer = null;
 					resolve();
 				});
