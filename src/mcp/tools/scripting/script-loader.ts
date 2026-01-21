@@ -1,10 +1,11 @@
+import { normalizePath } from "obsidian";
 import { ToolRegistry } from "../registry";
 import { MCPToolContext, MCPToolDefinition } from "../types";
 import type MCPPlugin from "../../../main";
 import { ScriptCompiler } from "./script-compiler";
 import { ScriptExecutor } from "./script-executor";
 
-const SCRIPT_FOLDER_NAME = "mcp-tools";
+const DEFAULT_SCRIPT_FOLDER_NAME = "mcp-tools";
 export class ScriptLoader {
 	private plugin: MCPPlugin;
 	private toolRegistry: ToolRegistry;
@@ -20,7 +21,7 @@ export class ScriptLoader {
 		this.toolRegistry = toolRegistry;
 		this.compiler = new ScriptCompiler();
 		this.executor = new ScriptExecutor();
-		this.scriptsPath = this.computeScriptsPath();
+		this.scriptsPath = this.resolveScriptsPath(this.plugin.settings?.scriptsPath);
 	}
 
 	async start(): Promise<void> {
@@ -43,12 +44,44 @@ export class ScriptLoader {
 		this.compiler.clear();
 	}
 
-	private computeScriptsPath(): string {
-		const configDir = this.plugin.app.vault.configDir;
-		if (!configDir) {
-			return "";
+	async updateScriptsPath(scriptsPath: string): Promise<void> {
+		const nextPath = this.resolveScriptsPath(scriptsPath);
+		if (nextPath === this.scriptsPath) {
+			return;
 		}
-		return `${configDir}/${SCRIPT_FOLDER_NAME}`;
+		this.unregisterAllScripts();
+		this.scriptsPath = nextPath;
+		await this.ensureScriptsFolder();
+		await this.reloadAllScripts();
+	}
+
+	async reloadScripts(): Promise<void> {
+		await this.reloadAllScripts();
+	}
+
+	private unregisterAllScripts(): void {
+		for (const toolName of this.toolNameCounts.keys()) {
+			this.toolRegistry.unregister(toolName);
+		}
+		this.scriptTools.clear();
+		this.toolNameCounts.clear();
+		this.compiler.clear();
+	}
+
+	private resolveScriptsPath(settingPath?: string): string {
+		const fallback = normalizePath(DEFAULT_SCRIPT_FOLDER_NAME);
+		const trimmed = settingPath?.trim();
+		if (!trimmed) {
+			return fallback;
+		}
+
+		const normalized = trimmed.replace(/\\/g, "/");
+		if (normalized.startsWith("/") || normalized.includes("..")) {
+			return fallback;
+		}
+
+		const cleaned = normalized.replace(/^\.?\//, "");
+		return normalizePath(cleaned);
 	}
 
 	private async ensureScriptsFolder(): Promise<void> {

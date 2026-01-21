@@ -93,6 +93,36 @@ export default class MCPPlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
+	async updateScriptsPath(scriptsPath: string): Promise<void> {
+		const trimmed = scriptsPath.trim();
+		this.settings.scriptsPath = trimmed ? trimmed : DEFAULT_SETTINGS.scriptsPath;
+		await this.saveSettings();
+
+		if (this.scriptLoader) {
+			try {
+				await this.scriptLoader.updateScriptsPath(this.settings.scriptsPath);
+				this.exampleManager?.setScriptsPath(this.scriptLoader.getScriptsPathValue());
+			} catch (error) {
+				console.error("[MCP] Failed to update scripts path:", error);
+				new Notice("Failed to update scripts folder. Using the default path.");
+			}
+		}
+	}
+
+	async reloadScripts(): Promise<void> {
+		if (!this.scriptLoader) {
+			new Notice("Script loader is not available");
+			return;
+		}
+		try {
+			await this.scriptLoader.reloadScripts();
+			new Notice("Scripts reloaded");
+		} catch (error) {
+			console.error("[MCP] Failed to reload scripts:", error);
+			new Notice("Failed to reload scripts");
+		}
+	}
+
 	/**
 	 * Restart the MCP server (useful after settings change)
 	 */

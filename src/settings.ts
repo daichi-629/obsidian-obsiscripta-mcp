@@ -5,11 +5,13 @@ import { ExampleManager } from "./mcp/tools/scripting/example-manager";
 export interface MCPPluginSettings {
 	port: number;
 	autoStart: boolean;
+	scriptsPath: string;
 }
 
 export const DEFAULT_SETTINGS: MCPPluginSettings = {
 	port: 3000,
-	autoStart: true
+	autoStart: true,
+	scriptsPath: "mcp-tools"
 };
 
 export class MCPSettingTab extends PluginSettingTab {
@@ -66,8 +68,38 @@ export class MCPSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
+			.setName("Script tools")
+			.setHeading();
+
+		let scriptsPathTimer: number | null = null;
+		new Setting(containerEl)
+			.setName("Script folder")
+			.setDesc("Relative to the vault root. Scripts reload automatically after changes.")
+			.addText(text => text
+				.setPlaceholder("mcp-tools")
+				.setValue(this.plugin.settings.scriptsPath)
+				.onChange((value) => {
+					if (scriptsPathTimer !== null) {
+						clearTimeout(scriptsPathTimer);
+					}
+					scriptsPathTimer = window.setTimeout(() => {
+						void this.plugin.updateScriptsPath(value);
+						scriptsPathTimer = null;
+					}, 400);
+				}));
+
+		new Setting(containerEl)
+			.setName("Reload scripts")
+			.setDesc("Reload all scripts from the configured folder")
+			.addButton(button => button
+				.setButtonText("Reload")
+				.onClick(async () => {
+					await this.plugin.reloadScripts();
+				}));
+
+		new Setting(containerEl)
 			.setName("Example script")
-			.setDesc("Copy the bundled example tool into the config folder (mcp-tools/)")
+			.setDesc("Copy the bundled example tool into the script folder")
 			.addButton(button => button
 				.setButtonText("Copy")
 				.setDisabled(!this.exampleManager)

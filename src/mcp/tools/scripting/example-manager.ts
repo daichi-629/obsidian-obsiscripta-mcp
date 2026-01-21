@@ -12,6 +12,10 @@ export class ExampleManager {
 		this.scriptsPath = scriptsPath;
 	}
 
+	setScriptsPath(scriptsPath: string): void {
+		this.scriptsPath = scriptsPath;
+	}
+
 	async copyExampleToScripts(): Promise<void> {
 		if (!this.scriptsPath) {
 			new Notice("Scripts path is not set");
