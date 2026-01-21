@@ -4,13 +4,15 @@ import { MCPToolContext, MCPToolDefinition } from "../types";
 import { getPlugin } from "../../utils/plugin-access";
 
 type RequireFn = (id: string) => unknown;
+const DATAVIEW_PLUGIN_ID = "dataview";
 
 export class ScriptExecutor {
 	execute(code: string, scriptPath: string, context: MCPToolContext): MCPToolDefinition {
 		const module = { exports: {} as Record<string, unknown> };
 		const localRequire = this.createLocalRequire(scriptPath, context);
 		const dirname = this.getDirname(scriptPath);
-		const dataviewPlugin = getPlugin(context.app, "dataview") as { api?: unknown } | undefined;
+		const dataviewPlugin = getPlugin(context.app, DATAVIEW_PLUGIN_ID) as { api?: unknown } | undefined;
+		// Dataview API instance, if the Dataview plugin is installed.
 		const dv = dataviewPlugin?.api;
 		// eslint-disable-next-line @typescript-eslint/no-implied-eval
 		const runner = new Function(
