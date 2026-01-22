@@ -1,9 +1,12 @@
 name: Release Obsidian plugin
 
 on:
-  push:
-    tags:
-      - "*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (must match manifest.json version)"
+        required: true
+        type: string
 
 jobs:
   build:
@@ -27,7 +30,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          tag="${GITHUB_REF#refs/tags/}"
+          tag="${{ inputs.tag }}"
 
           gh release create "$tag" \
             --title="$tag" \
