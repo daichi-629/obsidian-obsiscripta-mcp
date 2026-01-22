@@ -12,13 +12,13 @@ Important notes:
 - Streamable HTTP MCP server for local AI clients.
 - Built-in note tools (read now, more CRUD tools planned).
 - Script extension system for custom tools (JavaScript/TypeScript).
-- Hot-reload for scripts in `.obsidian/mcp-tools/`.
+- Hot-reload for scripts in the vault-root `mcp-tools/` folder (configurable in settings).
 
 ## Quick start (development)
 
 ```bash
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 Reload Obsidian and enable the plugin in **Settings → Community plugins**.
@@ -26,7 +26,7 @@ Reload Obsidian and enable the plugin in **Settings → Community plugins**.
 ## Production build
 
 ```bash
-npm run build
+pnpm run build
 ```
 
 ## Manual install
@@ -42,10 +42,10 @@ Copy these files to your vault plugin folder:
 
 ## Script tools
 
-Scripts are discovered in:
+Scripts are discovered in (vault-root, configurable):
 
 ```
-.obsidian/mcp-tools/
+mcp-tools/
 ```
 
 Example:
@@ -71,6 +71,9 @@ export default {
 ```
 
 Relative imports in scripts resolve from the script file location.
+
+If the Dataview plugin is installed, scripts also receive `dv` (Dataview API). When Dataview is not installed, `dv` is undefined.
+See `examples/dataview-example.js` for a minimal Dataview tool example.
 
 ## Settings and commands
 
