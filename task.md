@@ -30,7 +30,7 @@
    - **セッション管理**
      - `Map<sessionId, transport>`でセッションを管理
      - `transport.onclose`でセッションマップから削除
-     - `InMemoryEventStore`でresumability対応
+    - resumabilityは未実装（`eventStore`は省略）
    - **McpServer生成**
      - セッション単位で`McpServer`を生成（`getServer()`パターン）
      - ツール登録はToolRegistryから取得
@@ -70,29 +70,33 @@
 
 **Tasks**:
 1. Implement `ScriptExecutor` class
-   - VM with full Obsidian API access (same as dev console)
+   - `Function` constructor with full Obsidian API access (same as dev console)
 2. Implement `ScriptCompiler` class
-   - Use esbuild for TypeScript compilation
+   - Use sucrase for TypeScript compilation
    - Cache compiled scripts
 3. Implement `ScriptLoader` class
-   - Discover scripts in `.obsidian/mcp-tools/`
+   - Discover scripts in vault-root `mcp-tools/` (or configured path)
    - Load and register tools
    - File watching for hot-reload
 4. Create example script template
-5. Integrate with ToolRegistry
-6. Test custom tool from Claude Desktop
+5. Inject Dataview API as `dv` when Dataview plugin is installed
+6. Add Dataview example script for script authors
+7. Integrate with ToolRegistry
+8. Test custom tool from Claude Desktop
 
 **Success Criteria**:
-- [ ] Scripts in `.obsidian/mcp-tools/` are auto-discovered
-- [ ] JavaScript and TypeScript scripts both work
-- [ ] Custom tools appear in Claude Desktop
-- [ ] Scripts reload on file changes
-- [ ] Example script provided to users
+- [x] Scripts in the vault-root script folder are auto-discovered
+- [x] JavaScript and TypeScript scripts both work
+- [x] Custom tools appear in Claude Desktop
+- [x] Scripts reload on file changes
+- [x] Example script provided to users
+- [x] Dataview plugin provides `dv` in script scope when installed
 
 **Critical Files**:
 - `src/mcp/tools/scripting/script-loader.ts`
 - `src/mcp/tools/scripting/script-executor.ts`
 - `src/mcp/tools/scripting/script-compiler.ts`
+- `src/mcp/utils/plugin-access.ts`
 
 ---
 
@@ -129,7 +133,7 @@
    - Server enable/disable
    - Port configuration
    - Auto-start toggle
-   - Script folder path
+   - Script folder path (vault-root relative)
    - Reload scripts button
    - Server status indicator
    - **注意文言を設定画面に表示**:
@@ -174,7 +178,7 @@ After implementation, verify:
 - [ ] Claude Desktop can connect and use tools
 - [ ] Error messages are clear and helpful
 - [ ] Works on Windows, Mac, and Linux (if testing available)
-- [ ] Streamable HTTP再接続テスト（`Last-Event-ID`でイベント再送が動作する）
+- [ ] Streamable HTTPの再接続対応は将来検討（`Last-Event-ID`再送は未実装）
 
 ---
 
@@ -203,7 +207,7 @@ After implementation, verify:
 
 ---
 
-## Current Phase: Phase 2 - Script Extension System
+## Current Phase: Phase 3 - Complete Built-in Note Tools
 
 **Previous Phase (Phase 1)**: ✅ Completed - Minimal MCP server with read_note tool verified with MCP Inspector
 

@@ -9,7 +9,7 @@ Obsidian MCP pluginは、Model Context Protocol (MCP)を介してObsidianのVaul
 - **プロトコル**: Streamable HTTP transport（推奨。リモートMCPサーバー向け）
 - **対象環境**: Desktop only（モバイル互換は考慮しない）
 - **拡張性**: JavaScript/TypeScript スクリプトによるツール拡張（最優先機能）
-- **保存場所**: Vault内の専用フォルダ（`.obsidian/mcp-tools/`）
+- **保存場所**: Vaultルート配下の専用フォルダ（`mcp-tools/` など）
 - **組み込みツール**: ノートCRUD操作（create, read, update, delete, list）
 
 ## Architecture
@@ -18,8 +18,8 @@ Obsidian MCP pluginは、Model Context Protocol (MCP)を介してObsidianのVaul
 
 - **MCP SDK**: `@modelcontextprotocol/sdk` v1.x
 - **Transport**: Streamable HTTP (Node.js `http` module)
-- **Script Execution**: Node.js `vm` module (trusted execution, full API access)
-- **TypeScript Support**: esbuild for on-the-fly compilation
+- **Script Execution**: `Function` constructor (trusted execution, full API access)
+- **TypeScript Support**: sucrase for on-the-fly compilation
 
 ### Streamable HTTP Transport Details
 
@@ -40,7 +40,7 @@ Streamable HTTPはGET/POST/DELETEの3つのHTTPメソッドを使用し、セッ
 
 **McpServer生成方針**: セッション単位で生成（セッション間の完全な分離を保証）
 
-**Resumability**: `InMemoryEventStore`を使用し、`Last-Event-ID`による再接続時のイベント再送をサポート
+**Resumability**: 現状は未実装（`eventStore`は省略）。将来的に`InMemoryEventStore`で`Last-Event-ID`再送を検討
 
 **クリーンアップ**: `transport.onclose`でセッションマップから削除、シャットダウン時に全transportをclose
 
@@ -68,6 +68,7 @@ src/
 
   utils/
     logger.ts                      # Logging utility
+    plugin-access.ts               # Safe access to other plugins
 ```
 
 ## Key Technical Decisions
@@ -93,11 +94,12 @@ src/
 
 ### 2. Script Execution Environment
 
-**Decision**: Node.js `vm` module with full Obsidian API access (trusted execution)
+**Decision**: `Function` constructor with full Obsidian API access (trusted execution)
 
 **Rationale**:
 - User-authored scripts are trusted
-- Full access to APIs available in Obsidian dev console
+- Provides full access to APIs available in Obsidian dev console
+- Simpler than `vm` in Obsidian's Electron runtime
 
 **Exposed API**:
 ```typescript
@@ -107,25 +109,24 @@ interface MCPToolContext {
   plugin: MCPPlugin; // Plugin instance
 }
 ```
+Scripts also receive `dv` when the Dataview plugin is installed (Dataview API, otherwise undefined).
 
 ### 3. TypeScript Compilation
 
-**Decision**: esbuild transform API for on-the-fly compilation
+**Decision**: sucrase for on-the-fly compilation
 
 **Rationale**:
-- Extremely fast (faster than tsc)
-- Already in project dependencies
+- Lightweight and fast for single-file transforms
 - Minimal configuration needed
-- Can cache compiled results
+- Cache compiled results
 
 ### 4. Script Storage
 
-**Decision**: `.obsidian/mcp-tools/` folder
+**Decision**: Vaultルート配下のスクリプトフォルダ（例: `mcp-tools/`）
 
 **Rationale**:
 - Vault-specific configuration
 - Included in vault backups/sync
-- Hidden from main file tree (`.obsidian` folder)
 - Easy for users to access and edit
 
 ### 5. Script API Design
@@ -133,7 +134,7 @@ interface MCPToolContext {
 Users can create custom tools using this API:
 
 ```javascript
-// .obsidian/mcp-tools/example-tool.js
+// mcp-tools/example-tool.js
 export default {
   name: "example_tool",
   description: "An example custom tool",
@@ -152,6 +153,9 @@ export default {
   }
 };
 ```
+
+**Module resolution**:
+- Relative `import`/`require` in scripts resolves from the script file location.
 
 ## Testing Strategy
 
@@ -174,7 +178,7 @@ export default {
 
 ### Phase 2 Testing
 
-1. Create `.obsidian/mcp-tools/` folder
+1. Create `mcp-tools/` folder at the vault root (or set a custom folder)
 2. Add example JavaScript script
 3. Verify tool auto-loads
 4. Test tool from Claude Desktop
@@ -261,7 +265,7 @@ MVP is successful when:
 1. User can install plugin
 2. Server starts automatically
 3. Claude Desktop connects successfully
-4. User can create custom tool script in `.obsidian/mcp-tools/`
+4. User can create custom tool script in a vault-root script folder
 5. Custom tool appears in Claude Desktop
 6. Tool executes successfully from Claude
 7. All built-in note tools work correctly
