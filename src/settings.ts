@@ -76,7 +76,7 @@ export class MCPSettingTab extends PluginSettingTab {
 			.setName("Script folder")
 			.setDesc("Relative to the vault root. Scripts reload automatically after changes.")
 			.addText(text => text
-				.setPlaceholder("mcp-tools")
+				.setPlaceholder("Script tools (mcp-tools)")
 				.setValue(this.plugin.settings.scriptsPath)
 				.onChange((value) => {
 					if (scriptsPathTimer !== null) {
