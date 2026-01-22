@@ -1,12 +1,7 @@
 name: Release Obsidian plugin
 
 on:
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Release tag (must match manifest.json version)"
-        required: true
-        type: string
+  workflow_dispatch: {}
 
 jobs:
   build:
@@ -15,6 +10,33 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Read manifest version
+        id: version
+        run: |
+          version="$(node -p "require('./manifest.json').version")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push tag
+        run: |
+          version="${{ steps.version.outputs.version }}"
+
+          if git rev-parse "$version" >/dev/null 2>&1; then
+            echo "Tag $version already exists locally."
+            exit 1
+          fi
+
+          if git ls-remote --tags origin "refs/tags/$version" | grep -q "$version"; then
+            echo "Tag $version already exists on origin."
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$version" -m "$version"
+          git push origin "$version"
 
       - name: Use Node.js
         uses: actions/setup-node@v3
@@ -30,7 +52,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          tag="${{ inputs.tag }}"
+          tag="${{ steps.version.outputs.version }}"
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists."
+            exit 1
+          fi
 
           gh release create "$tag" \
             --title="$tag" \
