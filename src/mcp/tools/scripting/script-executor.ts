@@ -5,6 +5,7 @@ import { getPlugin } from "../../utils/plugin-access";
 
 type RequireFn = (id: string) => unknown;
 const DATAVIEW_PLUGIN_ID = "dataview";
+const TEMPLATER_PLUGIN_ID = "templater-obsidian";
 
 export class ScriptExecutor {
 	execute(code: string, scriptPath: string, context: MCPToolContext): MCPToolDefinition {
@@ -14,6 +15,9 @@ export class ScriptExecutor {
 		const dataviewPlugin = getPlugin(context.app, DATAVIEW_PLUGIN_ID) as { api?: unknown } | undefined;
 		// Dataview API instance, if the Dataview plugin is installed.
 		const dv = dataviewPlugin?.api;
+		const templaterPlugin = getPlugin(context.app, TEMPLATER_PLUGIN_ID) as { templater?: unknown; api?: unknown } | undefined;
+		// Templater API instance, if the Templater plugin is installed.
+		const tp = templaterPlugin?.templater ?? templaterPlugin?.api;
 		// eslint-disable-next-line @typescript-eslint/no-implied-eval
 		const runner = new Function(
 			"module",
@@ -25,6 +29,7 @@ export class ScriptExecutor {
 			"vault",
 			"plugin",
 			"dv",
+			"tp",
 			code
 		);
 		// eslint-disable-next-line @typescript-eslint/no-unsafe-call
@@ -37,7 +42,8 @@ export class ScriptExecutor {
 			context.app,
 			context.vault,
 			context.plugin,
-			dv
+			dv,
+			tp
 		);
 
 		const rawExports = module.exports as { default?: unknown } | undefined;

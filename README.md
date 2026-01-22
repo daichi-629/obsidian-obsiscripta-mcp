@@ -73,7 +73,8 @@ export default {
 Relative imports in scripts resolve from the script file location.
 
 If the Dataview plugin is installed, scripts also receive `dv` (Dataview API). When Dataview is not installed, `dv` is undefined.
-See `examples/dataview-example.js` for a minimal Dataview tool example.
+If the Templater plugin is installed, scripts also receive `tp` (Templater API). When Templater is not installed, `tp` is undefined.
+See `examples/dataview-example.js` and `examples/templater-example.js` for minimal examples.
 
 ## Settings and commands
 
