@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-mcp",
+	"name": "obsiscripta-mcp",
 	"version": "1.0.0",
-	"description": "Expose Obsidian vault operations via Model Context Protocol (MCP) for AI assistants",
+	"description": "Extensible, script-focused MCP server for Obsidian vault operations and AI assistants",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {

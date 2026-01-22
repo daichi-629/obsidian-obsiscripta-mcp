@@ -1,9 +1,9 @@
 {
 	"id": "obsidian-mcp",
-	"name": "MCP Server",
+	"name": "ObsiScripta MCP",
 	"version": "1.0.0",
 	"minAppVersion": "1.0.0",
-	"description": "Expose Obsidian vault operations via Model Context Protocol (MCP) for AI assistants like Claude Desktop.",
+	"description": "Extensible script-focused MCP server for Obsidian vault operations and AI assistants.",
 	"author": "daichi",
 	"isDesktopOnly": true
 }

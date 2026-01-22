@@ -7,7 +7,7 @@ import { ToolRegistry } from "./tools/registry";
 import { MCPToolContext, MCPToolDefinition } from "./tools/types";
 import type MCPPlugin from "../main";
 
-const SERVER_NAME = "obsidian-mcp";
+const SERVER_NAME = "obsiscripta-mcp";
 const SERVER_VERSION = "1.0.0";
 
 interface SessionData {

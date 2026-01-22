@@ -1,6 +1,6 @@
-# Obsidian MCP Server
+# ObsiScripta MCP
 
-Expose Obsidian vault operations to AI assistants via Model Context Protocol (MCP).
+Extensible, script-focused MCP server for Obsidian vault operations.
 
 Important notes:
 - Desktop only (no mobile support).
