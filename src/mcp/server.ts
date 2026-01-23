@@ -1,147 +1,46 @@
-import { createServer, Server as HttpServer, IncomingMessage, ServerResponse } from "http";
-import { randomUUID } from "crypto";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { z } from "zod";
+import {
+	createServer,
+	Server as HttpServer,
+	IncomingMessage,
+	ServerResponse,
+} from "http";
+import { handleHealth, handleToolCall, handleTools } from "./bridge-api";
 import { ToolRegistry } from "./tools/registry";
-import { MCPToolContext, MCPToolDefinition } from "./tools/types";
+import type { MCPToolContext } from "./tools/types";
+import { ToolCallRequest } from "./bridge-types";
 import type MCPPlugin from "../main";
 
-const SERVER_NAME = "obsiscripta-mcp";
-const SERVER_VERSION = "1.0.0";
-
-interface SessionData {
-	transport: StreamableHTTPServerTransport;
-	mcpServer: McpServer;
-}
-
-export class MCPServer {
+export class BridgeServer {
+	private static readonly MAX_BODY_BYTES = 1024 * 1024;
 	private httpServer: HttpServer | null = null;
-	private sessions: Map<string, SessionData> = new Map();
 	private toolRegistry: ToolRegistry;
-	private context: MCPToolContext;
+	private readonly context: MCPToolContext;
 	private port: number;
 
-	constructor(plugin: MCPPlugin, toolRegistry: ToolRegistry, port: number = 3000) {
+	constructor(
+		plugin: MCPPlugin,
+		toolRegistry: ToolRegistry,
+		port: number = 3000,
+	) {
 		this.toolRegistry = toolRegistry;
 		this.port = port;
 		this.context = {
 			vault: plugin.app.vault,
 			app: plugin.app,
-			plugin: plugin
+			plugin: plugin,
 		};
-	}
-
-	/**
-	 * Create a new McpServer instance for a session
-	 */
-	private createMcpServer(): McpServer {
-		const server = new McpServer(
-			{ name: SERVER_NAME, version: SERVER_VERSION },
-			{ capabilities: { tools: {} } }
-		);
-
-		// Register all tools from the registry
-		for (const tool of this.toolRegistry.list()) {
-			this.registerToolOnServer(server, tool);
-		}
-
-		return server;
-	}
-
-	/**
-	 * Register a tool definition on an McpServer instance
-	 */
-	private registerToolOnServer(server: McpServer, tool: MCPToolDefinition): void {
-		// Convert our schema format to zod schema for MCP SDK
-		const zodSchema = this.convertToZodSchema(tool.inputSchema);
-
-		server.registerTool(
-			tool.name,
-			{
-				description: tool.description,
-				inputSchema: zodSchema
-			},
-			async (args) => {
-				try {
-					const result = await tool.handler(args as Record<string, unknown>, this.context);
-					return result;
-				} catch (error) {
-					return {
-						content: [{
-							type: "text" as const,
-							text: `Error executing tool: ${error instanceof Error ? error.message : String(error)}`
-						}],
-						isError: true
-					};
-				}
-			}
-		);
-	}
-
-	/**
-	 * Convert our JSON Schema format to Zod schema
-	 */
-	private convertToZodSchema(schema: MCPToolDefinition["inputSchema"]): Record<string, z.ZodType> {
-		const zodShape: Record<string, z.ZodType> = {};
-
-		for (const [key, propSchema] of Object.entries(schema.properties)) {
-			let zodType: z.ZodType;
-
-			switch (propSchema.type) {
-				case "string":
-					zodType = z.string();
-					if (propSchema.description) {
-						zodType = zodType.describe(propSchema.description);
-					}
-					break;
-				case "number":
-					zodType = z.number();
-					if (propSchema.description) {
-						zodType = zodType.describe(propSchema.description);
-					}
-					break;
-				case "boolean":
-					zodType = z.boolean();
-					if (propSchema.description) {
-						zodType = zodType.describe(propSchema.description);
-					}
-					break;
-				case "array":
-					zodType = z.array(z.unknown());
-					if (propSchema.description) {
-						zodType = zodType.describe(propSchema.description);
-					}
-					break;
-				case "object":
-					zodType = z.record(z.string(), z.unknown());
-					if (propSchema.description) {
-						zodType = zodType.describe(propSchema.description);
-					}
-					break;
-				default:
-					zodType = z.unknown();
-			}
-
-			// Make optional if not in required array
-			if (!schema.required?.includes(key)) {
-				zodType = zodType.optional();
-			}
-
-			zodShape[key] = zodType;
-		}
-
-		return zodShape;
 	}
 
 	/**
 	 * Handle incoming HTTP requests
 	 */
-	private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+	private async handleRequest(
+		req: IncomingMessage,
+		res: ServerResponse,
+	): Promise<void> {
 		const url = new URL(req.url || "/", `http://${req.headers.host}`);
 
-		// Only handle /mcp endpoint
-		if (url.pathname !== "/mcp") {
+		if (!url.pathname.startsWith("/bridge/v1/")) {
 			res.writeHead(404, { "Content-Type": "application/json" });
 			res.end(JSON.stringify({ error: "Not found" }));
 			return;
@@ -149,8 +48,8 @@ export class MCPServer {
 
 		// Add CORS headers for local development
 		res.setHeader("Access-Control-Allow-Origin", "*");
-		res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-		res.setHeader("Access-Control-Allow-Headers", "Content-Type, mcp-session-id, Last-Event-ID");
+		res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+		res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
 		if (req.method === "OPTIONS") {
 			res.writeHead(204);
@@ -158,146 +57,152 @@ export class MCPServer {
 			return;
 		}
 
-		const sessionId = req.headers["mcp-session-id"] as string | undefined;
-
 		try {
-			switch (req.method) {
-				case "POST":
-					await this.handlePost(req, res, sessionId);
-					break;
-				case "GET":
-					await this.handleGet(req, res, sessionId);
-					break;
-				case "DELETE":
-					await this.handleDelete(req, res, sessionId);
-					break;
-				default:
-					res.writeHead(405, { "Content-Type": "application/json" });
-					res.end(JSON.stringify({ error: "Method not allowed" }));
-			}
+			await this.handleBridgeRequest(req, res, url);
 		} catch (error) {
-			console.error("[MCP] Error handling request:", error);
+			console.error("[Bridge] Error handling request:", error);
 			if (!res.headersSent) {
 				res.writeHead(500, { "Content-Type": "application/json" });
-				res.end(JSON.stringify({
-					error: error instanceof Error ? error.message : "Internal server error"
-				}));
+				res.end(
+					JSON.stringify({
+						error:
+							error instanceof Error
+								? error.message
+								: "Internal server error",
+					}),
+				);
 			}
 		}
 	}
 
-	/**
-	 * Handle POST requests (initialize and JSON-RPC messages)
-	 */
-	private async handlePost(req: IncomingMessage, res: ServerResponse, sessionId: string | undefined): Promise<void> {
-		// If no session ID, this should be an initialize request
-		if (!sessionId) {
-			await this.handleInitialize(req, res);
-			return;
-		}
-
-		// Route to existing session
-		const session = this.sessions.get(sessionId);
-		if (!session) {
-			res.writeHead(404, { "Content-Type": "application/json" });
-			res.end(JSON.stringify({
-				jsonrpc: "2.0",
-				error: { code: -32000, message: "Session not found" },
-				id: null
-			}));
-			return;
-		}
-
-		await session.transport.handleRequest(req, res);
-	}
-
-	/**
-	 * Handle initialize request (create new session)
-	 */
-	private async handleInitialize(req: IncomingMessage, res: ServerResponse): Promise<void> {
-		const transport = new StreamableHTTPServerTransport({
-			sessionIdGenerator: () => randomUUID(),
-			// Note: eventStore omitted for now (no resumability support)
-			onsessioninitialized: (sessionId) => {
-				// Store the session when initialized
-				const mcpServer = this.createMcpServer();
-				this.sessions.set(sessionId, { transport, mcpServer });
-				console.debug(`[MCP] Session initialized: ${sessionId}`);
-
-				// Connect the server to the transport
-				mcpServer.connect(transport).catch((error) => {
-					console.error("[MCP] Error connecting server to transport:", error);
-				});
-			}
-		});
-
-		// Set up cleanup on close
-		transport.onclose = () => {
-			const sessionId = transport.sessionId;
-			if (sessionId && this.sessions.has(sessionId)) {
-				this.sessions.delete(sessionId);
-				console.debug(`[MCP] Session closed: ${sessionId}`);
-			}
+	private async handleBridgeRequest(
+		req: IncomingMessage,
+		res: ServerResponse,
+		url: URL,
+	): Promise<void> {
+		const sendJson = (status: number, payload: unknown) => {
+			res.writeHead(status, { "Content-Type": "application/json" });
+			res.end(JSON.stringify(payload));
 		};
 
-		// Handle the initialize request
-		await transport.handleRequest(req, res);
+		try {
+			if (url.pathname === "/bridge/v1/health") {
+				if (req.method !== "GET") {
+					sendJson(405, { error: "Method not allowed" });
+					return;
+				}
+				sendJson(200, handleHealth());
+				return;
+			}
+
+			if (url.pathname === "/bridge/v1/tools") {
+				if (req.method !== "GET") {
+					sendJson(405, { error: "Method not allowed" });
+					return;
+				}
+				sendJson(200, handleTools(this.toolRegistry));
+				return;
+			}
+
+			const toolCallMatch = url.pathname.match(
+				/^\/bridge\/v1\/tools\/([^/]+)\/call$/,
+			);
+			if (toolCallMatch) {
+				if (req.method !== "POST") {
+					sendJson(405, { error: "Method not allowed" });
+					return;
+				}
+
+				const toolName = decodeURIComponent(toolCallMatch[1]);
+				if (!this.toolRegistry.get(toolName)) {
+					sendJson(404, { error: "Tool not found" });
+					return;
+				}
+
+				let payload: ToolCallRequest;
+				try {
+					const rawBody = await this.readRequestBody(req);
+					payload = JSON.parse(rawBody) as ToolCallRequest;
+				} catch (error) {
+					const message =
+						error instanceof Error ? error.message : String(error);
+					if (message === "Request body too large") {
+						sendJson(413, { error: "Request body too large" });
+					} else {
+						sendJson(400, {
+							error: "Invalid request body",
+							details: message,
+						});
+					}
+					return;
+				}
+
+				const hasArguments =
+					payload &&
+					typeof payload === "object" &&
+					"arguments" in payload;
+				const argsValue = hasArguments
+					? (payload as ToolCallRequest).arguments
+					: null;
+				if (
+					!hasArguments ||
+					!argsValue ||
+					typeof argsValue !== "object" ||
+					Array.isArray(argsValue)
+				) {
+					sendJson(400, { error: "Invalid request body" });
+					return;
+				}
+
+				try {
+					const response = await handleToolCall(
+						toolName,
+						argsValue,
+						this.toolRegistry,
+						this.context,
+					);
+					sendJson(200, response);
+				} catch (error) {
+					sendJson(500, {
+						error: "Internal server error",
+						details:
+							error instanceof Error
+								? error.message
+								: String(error),
+					});
+				}
+				return;
+			}
+
+			sendJson(404, { error: "Not found" });
+		} catch (error) {
+			if (!res.headersSent) {
+				sendJson(500, {
+					error: "Internal server error",
+					details:
+						error instanceof Error ? error.message : String(error),
+				});
+			}
+		}
 	}
 
-	/**
-	 * Handle GET requests (SSE stream)
-	 */
-	private async handleGet(req: IncomingMessage, res: ServerResponse, sessionId: string | undefined): Promise<void> {
-		if (!sessionId) {
-			res.writeHead(400, { "Content-Type": "application/json" });
-			res.end(JSON.stringify({
-				jsonrpc: "2.0",
-				error: { code: -32000, message: "Session ID required for SSE stream" },
-				id: null
-			}));
-			return;
-		}
-
-		const session = this.sessions.get(sessionId);
-		if (!session) {
-			res.writeHead(404, { "Content-Type": "application/json" });
-			res.end(JSON.stringify({
-				jsonrpc: "2.0",
-				error: { code: -32000, message: "Session not found" },
-				id: null
-			}));
-			return;
-		}
-
-		await session.transport.handleRequest(req, res);
-	}
-
-	/**
-	 * Handle DELETE requests (session termination)
-	 */
-	private async handleDelete(req: IncomingMessage, res: ServerResponse, sessionId: string | undefined): Promise<void> {
-		if (!sessionId) {
-			res.writeHead(400, { "Content-Type": "application/json" });
-			res.end(JSON.stringify({
-				jsonrpc: "2.0",
-				error: { code: -32000, message: "Session ID required" },
-				id: null
-			}));
-			return;
-		}
-
-		const session = this.sessions.get(sessionId);
-		if (!session) {
-			res.writeHead(404, { "Content-Type": "application/json" });
-			res.end(JSON.stringify({
-				jsonrpc: "2.0",
-				error: { code: -32000, message: "Session not found" },
-				id: null
-			}));
-			return;
-		}
-
-		await session.transport.handleRequest(req, res);
+	private async readRequestBody(req: IncomingMessage): Promise<string> {
+		return new Promise((resolve, reject) => {
+			let data = "";
+			let size = 0;
+			req.setEncoding("utf8");
+			req.on("data", (chunk) => {
+				size += chunk.length;
+				if (size > BridgeServer.MAX_BODY_BYTES) {
+					req.destroy();
+					reject(new Error("Request body too large"));
+					return;
+				}
+				data += chunk;
+			});
+			req.on("end", () => resolve(data));
+			req.on("error", (error) => reject(error));
+		});
 	}
 
 	/**
@@ -305,57 +210,76 @@ export class MCPServer {
 	 */
 	async start(): Promise<void> {
 		if (this.httpServer) {
-			console.warn("[MCP] Server already running");
+			console.warn("[Bridge] Server already running");
 			return;
 		}
 
 		return new Promise((resolve, reject) => {
-			const isErrnoLike = (value: unknown): value is { code?: string } => {
-				return typeof value === "object" && value !== null && "code" in value;
+			const isErrnoLike = (
+				value: unknown,
+			): value is { code?: string } => {
+				return (
+					typeof value === "object" &&
+					value !== null &&
+					"code" in value
+				);
 			};
+			let settled = false;
 
 			this.httpServer = createServer((req, res) => {
 				this.handleRequest(req, res).catch((error) => {
-					console.error("[MCP] Unhandled error:", error);
+					console.error("[Bridge] Unhandled error:", error);
 				});
 			});
 
-			this.httpServer.on("error", (error: unknown) => {
-				const err = error instanceof Error ? error : new Error(String(error));
+			this.httpServer.once("error", (error: unknown) => {
+				const err =
+					error instanceof Error ? error : new Error(String(error));
+				const server = this.httpServer;
+				this.httpServer = null;
+				if (server) {
+					server.close(() => {
+						console.debug(
+							"[Bridge] Server closed after start error",
+						);
+					});
+				}
+				if (settled) {
+					return;
+				}
+				settled = true;
 				if (isErrnoLike(error) && error.code === "EADDRINUSE") {
-					reject(new Error(`Port ${this.port} is already in use. Please configure a different port in settings.`));
+					reject(
+						new Error(
+							`Port ${this.port} is already in use. Please configure a different port in settings.`,
+						),
+					);
 					return;
 				}
 				reject(err);
 			});
 
 			this.httpServer.listen(this.port, "127.0.0.1", () => {
-				console.debug(`[MCP] Server started on http://127.0.0.1:${this.port}/mcp`);
+				console.debug(
+					`[Bridge] Server started on http://127.0.0.1:${this.port}/bridge/v1`,
+				);
+				if (settled) {
+					return;
+				}
+				settled = true;
 				resolve();
 			});
 		});
 	}
 
 	/**
-	 * Stop the HTTP server and clean up all sessions
+	 * Stop the HTTP server
 	 */
 	async stop(): Promise<void> {
-		// Close all active sessions
-		for (const [sessionId, session] of this.sessions) {
-			try {
-				await session.transport.close();
-				console.debug(`[MCP] Closed session: ${sessionId}`);
-			} catch (error) {
-				console.error(`[MCP] Error closing session ${sessionId}:`, error);
-			}
-		}
-		this.sessions.clear();
-
-		// Close HTTP server
 		if (this.httpServer) {
 			return new Promise((resolve) => {
 				this.httpServer!.close(() => {
-					console.debug("[MCP] Server stopped");
+					console.debug("[Bridge] Server stopped");
 					this.httpServer = null;
 					resolve();
 				});
@@ -368,12 +292,5 @@ export class MCPServer {
 	 */
 	isRunning(): boolean {
 		return this.httpServer !== null;
-	}
-
-	/**
-	 * Get the number of active sessions
-	 */
-	getSessionCount(): number {
-		return this.sessions.size;
 	}
 }
