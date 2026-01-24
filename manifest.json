@@ -1,9 +1,9 @@
 {
 	"id": "obsidian-mcp",
-	"name": "ObsiScripta MCP",
+	"name": "ObsiScripta Bridge",
 	"version": "1.0.0",
 	"minAppVersion": "1.0.0",
-	"description": "Extensible script-focused MCP server for Obsidian vault operations and AI assistants.",
+	"description": "Extensible script-focused bridge server for Obsidian vault operations and AI assistants.",
 	"author": "daichi",
 	"isDesktopOnly": true
 }

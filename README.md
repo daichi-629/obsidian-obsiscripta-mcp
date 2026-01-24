@@ -1,6 +1,6 @@
-# ObsiScripta MCP
+# ObsiScripta Bridge
 
-Extensible, script-focused MCP server for Obsidian vault operations.
+Extensible, script-focused bridge API server for Obsidian vault operations.
 
 Important notes:
 - Desktop only (no mobile support).
@@ -9,7 +9,7 @@ Important notes:
 
 ## Features
 
-- Streamable HTTP MCP server for local AI clients.
+- Bridge Protocol v1 HTTP API for local AI clients.
 - Built-in note tools (read now, more CRUD tools planned).
 - Script extension system for custom tools (JavaScript/TypeScript).
 - Hot-reload for scripts in the vault-root `mcp-tools/` folder (configurable in settings).
@@ -91,5 +91,4 @@ eslint main.ts
 
 ## References
 
-- MCP SDK: https://github.com/modelcontextprotocol/sdk
 - Obsidian API docs: https://docs.obsidian.md
