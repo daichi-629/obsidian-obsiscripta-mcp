@@ -5,6 +5,7 @@
 	"main": "main.js",
 	"type": "module",
 	"scripts": {
+		"prebuild": "pnpm --filter @obsiscripta/shared run build",
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"version": "node ../../scripts/sync-version.mjs",
