@@ -3,13 +3,13 @@
  * Phase 3: Implement actual server
  */
 
-import type { BridgeConfig } from './types.js';
+import type { PluginClientConfig } from './types.js';
 import { PluginClient } from './plugin-client.js';
 
 export class BridgeServer {
 	private client: PluginClient;
 
-	constructor(config: BridgeConfig) {
+	constructor(config?: Partial<PluginClientConfig>) {
 		this.client = new PluginClient(config);
 	}
 
