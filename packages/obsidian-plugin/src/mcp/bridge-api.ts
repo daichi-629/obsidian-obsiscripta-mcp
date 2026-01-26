@@ -3,7 +3,9 @@ import { HealthResponse, ToolListResponse, ToolCallResponse } from "./bridge-typ
 import { ToolRegistry } from "./tools/registry";
 import type { MCPToolContext, MCPToolDefinition } from "./tools/types";
 
-const BRIDGE_VERSION = "1.0.0";
+declare const __BRIDGE_VERSION__: string;
+
+const BRIDGE_VERSION = __BRIDGE_VERSION__;
 const PROTOCOL_VERSION = "1";
 
 /**

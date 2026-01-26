@@ -10,7 +10,13 @@
 		"dev": "pnpm -r dev",
 		"lint": "pnpm -r lint",
 		"plugin": "pnpm --filter obsiscripta-bridge-plugin",
-		"bridge": "pnpm --filter obsidian-mcp-bridge"
+		"bridge": "pnpm --filter obsidian-mcp-bridge",
+		"version": "node scripts/sync-version.mjs",
+		"version:sync": "node scripts/sync-version.mjs",
+		"version:bump": "node scripts/bump-version.mjs",
+		"version:patch": "node scripts/bump-version.mjs patch",
+		"version:minor": "node scripts/bump-version.mjs minor",
+		"version:major": "node scripts/bump-version.mjs major"
 	},
 	"keywords": [],
 	"license": "0-BSD"

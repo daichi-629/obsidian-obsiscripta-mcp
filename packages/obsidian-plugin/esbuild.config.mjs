@@ -1,7 +1,7 @@
 import esbuild from "esbuild";
 import process from "process";
 import { builtinModules } from "node:module";
-import { access, copyFile } from "node:fs/promises";
+import { access, copyFile, readFile } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +17,10 @@ const prod = (process.argv[2] === "production");
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "../..");
 const pluginRoot = __dirname;
+const rootPackage = JSON.parse(
+	await readFile(path.join(projectRoot, "package.json"), "utf8"),
+);
+const rootVersion = rootPackage.version ?? "0.0.0";
 
 async function copyIfExists(src, dest) {
 	try {
@@ -77,6 +81,9 @@ const context = await esbuild.context({
 	treeShaking: true,
 	outfile: "../../main.js",
 	minify: prod,
+	define: {
+		__BRIDGE_VERSION__: JSON.stringify(rootVersion),
+	},
 	plugins: [copyStaticPlugin],
 });
 
