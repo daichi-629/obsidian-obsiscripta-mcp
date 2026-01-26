@@ -1,6 +1,7 @@
 import { createRequire } from "module";
 import path from "path";
-import { MCPToolContext, MCPToolDefinition } from "../types";
+import { AppContext } from "../../../plugin/context";
+import { MCPToolDefinition } from "../types";
 import { getPlugin } from "../../utils/plugin-access";
 
 type RequireFn = (id: string) => unknown;
@@ -8,7 +9,7 @@ const DATAVIEW_PLUGIN_ID = "dataview";
 const TEMPLATER_PLUGIN_ID = "templater-obsidian";
 
 export class ScriptExecutor {
-	execute(code: string, scriptPath: string, context: MCPToolContext): MCPToolDefinition {
+	execute(code: string, scriptPath: string, context: AppContext): MCPToolDefinition {
 		const module = { exports: {} as Record<string, unknown> };
 		const localRequire = this.createLocalRequire(scriptPath, context);
 		const dirname = this.getDirname(scriptPath);
@@ -57,7 +58,7 @@ export class ScriptExecutor {
 		return tool as MCPToolDefinition;
 	}
 
-	private createLocalRequire(scriptPath: string, context: MCPToolContext): RequireFn | undefined {
+	private createLocalRequire(scriptPath: string, context: AppContext): RequireFn | undefined {
 		const globalRequire = this.getGlobalRequire();
 		if (!globalRequire) {
 			return undefined;

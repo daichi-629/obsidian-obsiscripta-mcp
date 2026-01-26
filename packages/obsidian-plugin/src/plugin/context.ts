@@ -1,4 +1,4 @@
-import { App, Vault } from "obsidian";
+import { App, EventRef, Vault } from "obsidian";
 import type MCPPlugin from "../main";
 
 /**
@@ -18,10 +18,11 @@ export interface AppContext {
 /**
  * Event registration interface for decoupled lifecycle management.
  * Allows components to register cleanup handlers without depending on the full Plugin.
+ * Matches Obsidian's Plugin.registerEvent signature.
  */
 export interface EventRegistrar {
 	/**
-	 * Register a cleanup callback to be invoked on plugin unload.
+	 * Register an event to be automatically cleaned up on plugin unload.
 	 */
-	registerEvent(callback: () => void): void;
+	registerEvent(eventRef: EventRef): void;
 }

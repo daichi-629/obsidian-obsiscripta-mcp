@@ -1,5 +1,5 @@
 import { ToolRegistry } from "./registry";
-import type { MCPToolContext } from "./types";
+import type { AppContext } from "../../plugin/context";
 import { handleHealth, handleTools, handleToolCall } from "../bridge-api";
 import type { HealthResponse, ToolListResponse, ToolCallResponse } from "../bridge-types";
 
@@ -9,9 +9,9 @@ import type { HealthResponse, ToolListResponse, ToolCallResponse } from "../brid
  */
 export class ToolExecutor {
 	private readonly registry: ToolRegistry;
-	private readonly context: MCPToolContext;
+	private readonly context: AppContext;
 
-	constructor(registry: ToolRegistry, context: MCPToolContext) {
+	constructor(registry: ToolRegistry, context: AppContext) {
 		this.registry = registry;
 		this.context = context;
 	}

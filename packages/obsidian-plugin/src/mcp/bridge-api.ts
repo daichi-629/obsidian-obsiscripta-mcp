@@ -1,7 +1,8 @@
 import { createHash } from "crypto";
 import { HealthResponse, ToolListResponse, ToolCallResponse } from "./bridge-types";
 import { ToolRegistry } from "./tools/registry";
-import type { MCPToolContext, MCPToolDefinition } from "./tools/types";
+import type { AppContext } from "../plugin/context";
+import type { MCPToolDefinition } from "./tools/types";
 
 declare const __BRIDGE_VERSION__: string;
 
@@ -72,7 +73,7 @@ export async function handleToolCall(
 	toolName: string,
 	argumentsPayload: unknown,
 	registry: ToolRegistry,
-	context: MCPToolContext
+	context: AppContext
 ): Promise<ToolCallResponse> {
 	if (!registry.has(toolName)) {
 		return {

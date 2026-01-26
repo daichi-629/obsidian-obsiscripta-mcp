@@ -22,7 +22,21 @@ export class ToolingManager {
 			this.registry.register(tool, ToolSource.Builtin);
 		}
 
-		this.scriptLoader = new ScriptLoader(this.plugin, this.registry);
+		const vault = this.plugin.app.vault;
+		const toolContext = {
+			vault: this.plugin.app.vault,
+			app: this.plugin.app,
+			plugin: this.plugin
+		};
+		const scriptsPath = this.plugin.settings?.scriptsPath ?? "";
+
+		this.scriptLoader = new ScriptLoader(
+			vault,
+			toolContext,
+			this.plugin,
+			scriptsPath,
+			this.registry
+		);
 		this.exampleManager = new ExampleManager(
 			this.plugin,
 			this.scriptLoader.getScriptsPathValue(),

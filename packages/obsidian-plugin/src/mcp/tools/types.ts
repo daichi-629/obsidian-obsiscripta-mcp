@@ -42,5 +42,5 @@ export interface MCPToolDefinition {
 	name: string;
 	description: string;
 	inputSchema: JSONSchema;
-	handler: (args: Record<string, unknown>, context: MCPToolContext) => Promise<MCPToolResult>;
+	handler: (args: Record<string, unknown>, context: AppContext) => Promise<MCPToolResult>;
 }
