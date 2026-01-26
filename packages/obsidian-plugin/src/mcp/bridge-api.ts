@@ -58,7 +58,7 @@ export function handleTools(registry: ToolRegistry): ToolListResponse {
 		.map((tool) => ({
 			name: tool.name,
 			description: tool.description,
-			inputSchema: tool.inputSchema
+			inputSchema: tool.inputSchema as unknown as Record<string, unknown>
 		}));
 
 	return {

@@ -107,7 +107,7 @@ export class BridgeServer {
 			const toolCallMatch = url.pathname.match(
 				/^\/bridge\/v1\/tools\/([^/]+)\/call$/,
 			);
-			if (toolCallMatch) {
+			if (toolCallMatch && toolCallMatch[1]) {
 				if (req.method !== "POST") {
 					sendJson(405, { error: "Method not allowed" });
 					return;
