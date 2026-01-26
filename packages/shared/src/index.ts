@@ -1,6 +1,6 @@
 /**
- * Bridge Protocol Type Definitions
- * Re-exported from @obsiscripta/shared
+ * @obsiscripta/shared
+ * Shared type definitions for ObsiScripta
  */
 
 export type {
@@ -13,4 +13,4 @@ export type {
 	ToolCallErrorResponse,
 	ToolCallResponse,
 	ErrorResponse,
-} from "@obsiscripta/shared";
+} from "./bridge-types.js";
