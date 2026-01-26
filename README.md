@@ -40,6 +40,38 @@ Copy these files to your vault plugin folder:
   styles.css
 ```
 
+## Install with BRAT
+
+1. Install and enable **BRAT** in **Settings → Community plugins**.
+2. Open **Settings → BRAT** and select **Add Beta plugin**.
+3. Enter the repository URL (example: `https://github.com/daichi-629/obsidian-obsiscripta-mcp`) and add it.
+4. Go back to **Settings → Community plugins** and enable **ObsiScripta Bridge**.
+
+## Claude Desktop (stdio bridge) configuration
+
+1. Open **Settings → Community plugins → ObsiScripta Bridge**.
+2. Check the endpoint shown under **Connection info**.
+   - Example: `http://127.0.0.1:3000/bridge/v1`
+3. Download the stdio bridge binary for your OS from the GitHub release assets:
+   - https://github.com/daichi-629/obsidian-obsiscripta-mcp/releases
+4. Add a server entry in your Claude Desktop MCP configuration:
+
+```json
+{
+  "mcpServers": {
+    "obsidian": {
+      "command": "/path/to/obsidian-mcp",
+      "env": {
+        "OBSIDIAN_MCP_HOST": "127.0.0.1",
+        "OBSIDIAN_MCP_PORT": "3000"
+      }
+    }
+  }
+}
+```
+
+If you change the port, run **Restart server** and update `OBSIDIAN_MCP_PORT` to match.
+
 ## Script tools
 
 Scripts are discovered in (vault-root, configurable):
