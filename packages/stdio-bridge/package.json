@@ -5,10 +5,10 @@
 	"type": "module",
 	"main": "dist/index.js",
 	"bin": {
-		"obsidian-mcp": "./bin/obsidian-mcp.js"
+		"obsidian-mcp": "./dist/bin/obsidian-mcp.js"
 	},
 	"scripts": {
-		"build": "tsc",
+		"build": "tsc && cp -r bin dist/",
 		"dev": "tsc --watch"
 	},
 	"keywords": [
@@ -24,5 +24,8 @@
 	},
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.0.0"
+	},
+	"engines": {
+		"node": ">=16.0.0"
 	}
 }
