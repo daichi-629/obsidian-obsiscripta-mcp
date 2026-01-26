@@ -3,17 +3,30 @@ import { MCPToolDefinition } from "./types";
 /**
  * Registry for managing MCP tools
  */
+export enum ToolSource {
+	Builtin = "builtin",
+	Script = "script",
+	Unknown = "unknown",
+}
+
 export class ToolRegistry {
 	private tools: Map<string, MCPToolDefinition> = new Map();
+	private disabledTools: Set<string>;
+	private toolSources: Map<string, ToolSource> = new Map();
+
+	constructor(disabledTools?: Iterable<string>) {
+		this.disabledTools = new Set(disabledTools);
+	}
 
 	/**
 	 * Register a new tool
 	 */
-	register(tool: MCPToolDefinition): void {
+	register(tool: MCPToolDefinition, source: ToolSource = ToolSource.Unknown): void {
 		if (this.tools.has(tool.name)) {
 			console.warn(`[Bridge] Tool "${tool.name}" already registered, overwriting`);
 		}
 		this.tools.set(tool.name, tool);
+		this.toolSources.set(tool.name, source);
 		console.debug(`[Bridge] Registered tool: ${tool.name}`);
 	}
 
@@ -23,6 +36,7 @@ export class ToolRegistry {
 	unregister(name: string): boolean {
 		const deleted = this.tools.delete(name);
 		if (deleted) {
+			this.toolSources.delete(name);
 			console.debug(`[Bridge] Unregistered tool: ${name}`);
 		}
 		return deleted;
@@ -43,10 +57,49 @@ export class ToolRegistry {
 	}
 
 	/**
+	 * Check if a tool is enabled
+	 */
+	isEnabled(name: string): boolean {
+		return this.tools.has(name) && !this.disabledTools.has(name);
+	}
+
+	/**
+	 * Enable or disable a tool
+	 */
+	setEnabled(name: string, enabled: boolean): void {
+		if (enabled) {
+			this.disabledTools.delete(name);
+		} else {
+			this.disabledTools.add(name);
+		}
+	}
+
+	/**
+	 * Replace the disabled tools set
+	 */
+	setDisabledTools(names: Iterable<string>): void {
+		this.disabledTools = new Set(names);
+	}
+
+	/**
+	 * Get the source of a tool
+	 */
+	getSource(name: string): ToolSource {
+		return this.toolSources.get(name) ?? ToolSource.Unknown;
+	}
+
+	/**
 	 * Get all registered tools
 	 */
 	list(): MCPToolDefinition[] {
 		return Array.from(this.tools.values());
+	}
+
+	/**
+	 * Get all enabled tools
+	 */
+	listEnabled(): MCPToolDefinition[] {
+		return this.list().filter((tool) => this.isEnabled(tool.name));
 	}
 
 	/**
@@ -61,6 +114,7 @@ export class ToolRegistry {
 	 */
 	clear(): void {
 		this.tools.clear();
+		this.toolSources.clear();
 		console.debug("[Bridge] Cleared all tools");
 	}
 }

@@ -68,32 +68,3 @@ export interface PollingState {
 	tools: Map<string, MCPToolDefinition>;
 	lastError?: Error;
 }
-
-// =============================================================================
-// Legacy/Compatibility Types (used by existing modules)
-// =============================================================================
-
-/**
- * Bridge configuration (alias for PluginClientConfig)
- * @deprecated Use PluginClientConfig instead
- */
-export interface BridgeConfig {
-	pluginHost: string;
-	pluginPort: number;
-}
-
-/**
- * Tool request for callTool
- */
-export interface ToolRequest {
-	name: string;
-	arguments?: Record<string, unknown>;
-}
-
-/**
- * Tool response from callTool
- */
-export interface ToolResponse {
-	content: MCPContent[];
-	isError?: boolean;
-}

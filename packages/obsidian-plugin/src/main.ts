@@ -1,17 +1,17 @@
 import { Notice, Platform, Plugin } from "obsidian";
-import { DEFAULT_SETTINGS, MCPPluginSettings, MCPSettingTab } from "./settings";
-import { BridgeServer } from "./mcp/server";
-import { ToolRegistry } from "./mcp/tools/registry";
-import { getBuiltinNoteTools } from "./mcp/tools/builtin/notes";
-import { ScriptLoader } from "./mcp/tools/scripting/script-loader";
-import { ExampleManager } from "./mcp/tools/scripting/example-manager";
+import {
+	MCPPluginSettings,
+	SettingsStore,
+	MCPSettingTab,
+} from "./settings";
+import { ToolingManager } from "./plugin/tooling-manager";
+import { BridgeController } from "./plugin/bridge-controller";
 
 export default class MCPPlugin extends Plugin {
 	settings: MCPPluginSettings;
-	private mcpServer: BridgeServer | null = null;
-	private toolRegistry: ToolRegistry;
-	private scriptLoader: ScriptLoader | null = null;
-	private exampleManager: ExampleManager | null = null;
+	private settingsStore: SettingsStore;
+	private toolingManager: ToolingManager;
+	private bridgeController: BridgeController;
 
 	async onload() {
 		if (!Platform.isDesktopApp) {
@@ -19,56 +19,55 @@ export default class MCPPlugin extends Plugin {
 			return;
 		}
 
-		await this.loadSettings();
+		// Initialize settings store and load settings
+		this.settingsStore = new SettingsStore(this);
+		await this.settingsStore.load();
+		this.settings = this.settingsStore.getSettings() as MCPPluginSettings;
 
-		// Initialize tool registry
-		this.toolRegistry = new ToolRegistry();
+		// Calculate example source path for ExampleManager
+		const exampleSourcePath = this.getExampleSourcePath();
 
-		// Register built-in tools
-		for (const tool of getBuiltinNoteTools()) {
-			this.toolRegistry.register(tool);
-		}
-
-		// Load custom script tools
-		this.scriptLoader = new ScriptLoader(this, this.toolRegistry);
-		this.exampleManager = new ExampleManager(
+		this.toolingManager = new ToolingManager(
+			this.app.vault,
+			this.app,
 			this,
-			this.scriptLoader.getScriptsPathValue(),
+			this.settings,
+			this,
+			exampleSourcePath,
+			this.settings.disabledTools,
 		);
-		try {
-			await this.scriptLoader.start();
-		} catch (error) {
-			console.error("[Bridge] Failed to start script loader:", error);
-		}
+		await this.toolingManager.start();
 
-		// Initialize and start bridge server (if enabled)
-		if (this.settings.autoStart) {
-			this.mcpServer = new BridgeServer(
-				this,
-				this.toolRegistry,
-				this.settings.port,
-			);
-			try {
-				await this.mcpServer.start();
-				new Notice(
-					`Bridge server started on port ${this.settings.port}`,
-				);
-			} catch (error) {
-				console.error("[Bridge] Failed to start server:", error);
-				new Notice(
-					`Failed to start bridge server: ${error instanceof Error ? error.message : String(error)}`,
-				);
-			}
-		}
+		this.bridgeController = new BridgeController(
+			this.app,
+			this.app.vault,
+			{
+				autoStart: this.settings.autoStart,
+				port: this.settings.port,
+			},
+			this.toolingManager.registry,
+		);
+		await this.bridgeController.startIfEnabled();
 
-		// Add settings tab
+		// Inject services into settings store
+		this.settingsStore.setServices(
+			this.toolingManager,
+			this.bridgeController,
+		);
+
+		// Add settings tab with dependency injection
 		this.addSettingTab(
-			new MCPSettingTab(this.app, this, this.exampleManager),
+			new MCPSettingTab(
+				this.app,
+				this,
+				this.settingsStore,
+				this.toolingManager.getExampleManager(),
+			),
 		);
 
 		// Add ribbon icon for server status
 		this.addRibbonIcon("server", "Server status", () => {
-			if (this.mcpServer?.isRunning()) {
+			if (this.bridgeController.isRunning()) {
 				new Notice(`Server running on port ${this.settings.port}`);
 			} else {
 				new Notice("Server is not running");
@@ -80,12 +79,12 @@ export default class MCPPlugin extends Plugin {
 			id: "restart-server",
 			name: "Restart server",
 			callback: () => {
-				void this.restartServer();
+				void this.settingsStore.restartServer();
 			},
 		});
 
 		console.debug(
-			`[Bridge] Plugin loaded. Tools registered: ${this.toolRegistry.size}`,
+			`[Bridge] Plugin loaded. Tools registered: ${this.toolingManager.registry.size}`,
 		);
 	}
 
@@ -94,96 +93,26 @@ export default class MCPPlugin extends Plugin {
 	}
 
 	private async handleUnload(): Promise<void> {
-		if (this.scriptLoader) {
-			this.scriptLoader.stop();
-			this.scriptLoader = null;
-		}
-		this.exampleManager = null;
-
-		if (this.mcpServer) {
-			await this.mcpServer.stop();
+		this.toolingManager?.stop();
+		if (this.bridgeController) {
+			await this.bridgeController.stop();
 			console.debug("[Bridge] Server stopped on plugin unload");
 		}
 	}
 
-	async loadSettings() {
-		this.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
-			(await this.loadData()) as Partial<MCPPluginSettings>,
-		);
-		const normalizedPath = ScriptLoader.normalizeScriptsPath(
-			this.settings.scriptsPath,
-		);
-		if (normalizedPath !== this.settings.scriptsPath) {
-			this.settings.scriptsPath = normalizedPath;
-			await this.saveSettings();
-		}
-	}
-
-	async saveSettings() {
-		await this.saveData(this.settings);
-	}
-
-	async updateScriptsPath(scriptsPath: string): Promise<void> {
-		const normalizedPath = ScriptLoader.normalizeScriptsPath(scriptsPath);
-		if (!this.scriptLoader) {
-			this.settings.scriptsPath = normalizedPath;
-			await this.saveSettings();
-			return;
-		}
-
-		try {
-			if (normalizedPath !== this.scriptLoader.getScriptsPathValue()) {
-				await this.scriptLoader.updateScriptsPath(normalizedPath);
-			}
-			this.settings.scriptsPath = this.scriptLoader.getScriptsPathValue();
-			await this.saveSettings();
-			this.exampleManager?.setScriptsPath(this.settings.scriptsPath);
-		} catch (error) {
-			console.error("[Bridge] Failed to update scripts path:", error);
-			new Notice(
-				"Failed to update scripts folder. Using the default path.",
-			);
-		}
-	}
-
-	async reloadScripts(): Promise<void> {
-		if (!this.scriptLoader) {
-			new Notice("Script loader is not available");
-			return;
-		}
-		try {
-			await this.scriptLoader.reloadScripts();
-			new Notice("Scripts reloaded");
-		} catch (error) {
-			console.error("[Bridge] Failed to reload scripts:", error);
-			new Notice("Failed to reload scripts");
-		}
-	}
-
 	/**
-	 * Restart the bridge server (useful after settings change)
+	 * Calculate the path to the example script source file.
+	 * Returns the full path or empty string if unavailable.
 	 */
-	async restartServer(): Promise<void> {
-		if (this.mcpServer) {
-			await this.mcpServer.stop();
+	private getExampleSourcePath(): string {
+		const configDir = this.app.vault.configDir;
+		if (!configDir) {
+			return "";
 		}
-
-		this.mcpServer = new BridgeServer(
-			this,
-			this.toolRegistry,
-			this.settings.port,
-		);
-
-		try {
-			await this.mcpServer.start();
-			new Notice(`Bridge server restarted on port ${this.settings.port}`);
-		} catch (error) {
-			console.error("[Bridge] Failed to restart server:", error);
-			new Notice(
-				`Failed to restart bridge server: ${error instanceof Error ? error.message : String(error)}`,
-			);
+		const pluginId = this.manifest?.id;
+		if (!pluginId) {
+			return "";
 		}
+		return `${configDir}/plugins/${pluginId}/examples/example-tool.js`;
 	}
 }

@@ -1,14 +1,22 @@
-import { Notice } from "obsidian";
-import type MCPPlugin from "../../../main";
+import { Notice, TFolder, Vault, DataAdapter } from "obsidian";
 
 const EXAMPLE_SCRIPT_NAME = "example-tool.js";
 
 export class ExampleManager {
-	private plugin: MCPPlugin;
+	private vault: Vault;
+	private adapter: DataAdapter;
+	private exampleSourcePath: string;
 	private scriptsPath: string;
 
-	constructor(plugin: MCPPlugin, scriptsPath: string) {
-		this.plugin = plugin;
+	constructor(
+		vault: Vault,
+		adapter: DataAdapter,
+		exampleSourcePath: string,
+		scriptsPath: string
+	) {
+		this.vault = vault;
+		this.adapter = adapter;
+		this.exampleSourcePath = exampleSourcePath;
 		this.scriptsPath = scriptsPath;
 	}
 
@@ -22,50 +30,39 @@ export class ExampleManager {
 			return;
 		}
 
-		const adapter = this.plugin.app.vault.adapter;
-		const scriptsExists = await adapter.exists(this.scriptsPath);
-		if (!scriptsExists) {
-			await adapter.mkdir(this.scriptsPath);
+		const scriptsEntry = this.vault.getAbstractFileByPath(this.scriptsPath);
+		if (!scriptsEntry) {
+			await this.vault.createFolder(this.scriptsPath);
+		} else if (!(scriptsEntry instanceof TFolder)) {
+			new Notice(`Scripts path is not a folder: ${this.scriptsPath}`);
+			return;
 		}
 
 		const examplePath = `${this.scriptsPath}/${EXAMPLE_SCRIPT_NAME}`;
-		const exists = await adapter.exists(examplePath);
-		if (exists) {
+		const existing = this.vault.getAbstractFileByPath(examplePath);
+		if (existing) {
 			new Notice(`Example script already exists at ${examplePath}`);
 			return;
 		}
 
-		const sourcePath = this.getExampleSourcePath();
-		if (!sourcePath) {
+		if (!this.exampleSourcePath) {
 			new Notice("Example script source path unavailable");
 			return;
 		}
 
-		const sourceExists = await adapter.exists(sourcePath);
+		const sourceExists = await this.adapter.exists(this.exampleSourcePath);
 		if (!sourceExists) {
-			new Notice(`Example script not found at ${sourcePath}`);
+			new Notice(`Example script not found at ${this.exampleSourcePath}`);
 			return;
 		}
 
 		try {
-			const content = await adapter.read(sourcePath);
-			await adapter.write(examplePath, content);
+			const content = await this.adapter.read(this.exampleSourcePath);
+			await this.vault.create(examplePath, content);
 			new Notice(`Copied example script to ${examplePath}`);
 		} catch (error) {
 			console.error("[Bridge] Failed to copy example script:", error);
 			new Notice("Failed to copy example script");
 		}
-	}
-
-	private getExampleSourcePath(): string | null {
-		const configDir = this.plugin.app.vault.configDir;
-		if (!configDir) {
-			return null;
-		}
-		const pluginId = this.plugin.manifest?.id;
-		if (!pluginId) {
-			return null;
-		}
-		return `${configDir}/plugins/${pluginId}/examples/${EXAMPLE_SCRIPT_NAME}`;
 	}
 }

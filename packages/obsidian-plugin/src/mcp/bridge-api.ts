@@ -1,7 +1,8 @@
 import { createHash } from "crypto";
 import { HealthResponse, ToolListResponse, ToolCallResponse } from "./bridge-types";
 import { ToolRegistry } from "./tools/registry";
-import type { MCPToolContext, MCPToolDefinition } from "./tools/types";
+import type { AppContext } from "../plugin/context";
+import type { MCPToolDefinition } from "./tools/types";
 
 declare const __BRIDGE_VERSION__: string;
 
@@ -53,7 +54,7 @@ export function handleHealth(): HealthResponse {
 
 export function handleTools(registry: ToolRegistry): ToolListResponse {
 	const tools = registry
-		.list()
+		.listEnabled()
 		.slice()
 		.sort((a, b) => a.name.localeCompare(b.name))
 		.map((tool) => ({
@@ -64,7 +65,7 @@ export function handleTools(registry: ToolRegistry): ToolListResponse {
 
 	return {
 		tools,
-		hash: computeToolsHash(registry.list())
+		hash: computeToolsHash(registry.listEnabled())
 	};
 }
 
@@ -72,8 +73,18 @@ export async function handleToolCall(
 	toolName: string,
 	argumentsPayload: unknown,
 	registry: ToolRegistry,
-	context: MCPToolContext
+	context: AppContext
 ): Promise<ToolCallResponse> {
+	if (!registry.has(toolName)) {
+		return {
+			success: false,
+			content: [{
+				type: "text",
+				text: `Error: Tool "${toolName}" not found`
+			}],
+			isError: true
+		};
+	}
 	const tool = registry.get(toolName);
 	if (!tool) {
 		return {
