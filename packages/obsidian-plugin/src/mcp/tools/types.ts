@@ -1,14 +1,11 @@
-import { App, Vault } from "obsidian";
-import type MCPPlugin from "../../main";
+import type { AppContext } from "../../plugin/context";
 
 /**
- * Context provided to MCP tool handlers
+ * Context provided to MCP tool handlers.
+ * This is an alias for AppContext to maintain backward compatibility.
+ * @deprecated Use AppContext directly from plugin/context.ts
  */
-export interface MCPToolContext {
-	vault: Vault;
-	app: App;
-	plugin: MCPPlugin;
-}
+export type MCPToolContext = AppContext;
 
 /**
  * JSON Schema for tool input validation

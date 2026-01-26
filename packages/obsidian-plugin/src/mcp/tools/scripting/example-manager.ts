@@ -1,4 +1,4 @@
-import { Notice } from "obsidian";
+import { Notice, TFolder } from "obsidian";
 import type MCPPlugin from "../../../main";
 
 const EXAMPLE_SCRIPT_NAME = "example-tool.js";
@@ -22,15 +22,18 @@ export class ExampleManager {
 			return;
 		}
 
-		const adapter = this.plugin.app.vault.adapter;
-		const scriptsExists = await adapter.exists(this.scriptsPath);
-		if (!scriptsExists) {
-			await adapter.mkdir(this.scriptsPath);
+		const vault = this.plugin.app.vault;
+		const scriptsEntry = vault.getAbstractFileByPath(this.scriptsPath);
+		if (!scriptsEntry) {
+			await vault.createFolder(this.scriptsPath);
+		} else if (!(scriptsEntry instanceof TFolder)) {
+			new Notice(`Scripts path is not a folder: ${this.scriptsPath}`);
+			return;
 		}
 
 		const examplePath = `${this.scriptsPath}/${EXAMPLE_SCRIPT_NAME}`;
-		const exists = await adapter.exists(examplePath);
-		if (exists) {
+		const existing = vault.getAbstractFileByPath(examplePath);
+		if (existing) {
 			new Notice(`Example script already exists at ${examplePath}`);
 			return;
 		}
@@ -41,6 +44,7 @@ export class ExampleManager {
 			return;
 		}
 
+		const adapter = this.plugin.app.vault.adapter;
 		const sourceExists = await adapter.exists(sourcePath);
 		if (!sourceExists) {
 			new Notice(`Example script not found at ${sourcePath}`);
@@ -49,7 +53,7 @@ export class ExampleManager {
 
 		try {
 			const content = await adapter.read(sourcePath);
-			await adapter.write(examplePath, content);
+			await vault.create(examplePath, content);
 			new Notice(`Copied example script to ${examplePath}`);
 		} catch (error) {
 			console.error("[Bridge] Failed to copy example script:", error);

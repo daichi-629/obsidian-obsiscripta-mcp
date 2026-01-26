@@ -4,31 +4,21 @@ import {
 	IncomingMessage,
 	ServerResponse,
 } from "http";
-import { handleHealth, handleToolCall, handleTools } from "./bridge-api";
-import { ToolRegistry } from "./tools/registry";
-import type { MCPToolContext } from "./tools/types";
+import { ToolExecutor } from "./tools/executor";
 import { ToolCallRequest } from "./bridge-types";
-import type MCPPlugin from "../main";
 
 export class BridgeServer {
 	private static readonly MAX_BODY_BYTES = 1024 * 1024;
 	private httpServer: HttpServer | null = null;
-	private toolRegistry: ToolRegistry;
-	private readonly context: MCPToolContext;
+	private readonly executor: ToolExecutor;
 	private port: number;
 
 	constructor(
-		plugin: MCPPlugin,
-		toolRegistry: ToolRegistry,
+		executor: ToolExecutor,
 		port: number = 3000,
 	) {
-		this.toolRegistry = toolRegistry;
+		this.executor = executor;
 		this.port = port;
-		this.context = {
-			vault: plugin.app.vault,
-			app: plugin.app,
-			plugin: plugin,
-		};
 	}
 
 	/**
@@ -107,7 +97,7 @@ export class BridgeServer {
 					sendError(405, "Method not allowed");
 					return;
 				}
-				sendJson(200, handleHealth());
+				sendJson(200, this.executor.getHealth());
 				return;
 			}
 
@@ -116,7 +106,7 @@ export class BridgeServer {
 					sendError(405, "Method not allowed");
 					return;
 				}
-				sendJson(200, handleTools(this.toolRegistry));
+				sendJson(200, this.executor.getTools());
 				return;
 			}
 
@@ -130,10 +120,7 @@ export class BridgeServer {
 				}
 
 				const toolName = decodeURIComponent(toolCallMatch[1]);
-				if (
-					!this.toolRegistry.has(toolName) ||
-					!this.toolRegistry.isEnabled(toolName)
-				) {
+				if (!this.executor.isToolAvailable(toolName)) {
 					sendError(404, "Tool not found");
 					return;
 				}
@@ -171,11 +158,9 @@ export class BridgeServer {
 				}
 
 				try {
-					const response = await handleToolCall(
+					const response = await this.executor.executeToolCall(
 						toolName,
 						argsValue,
-						this.toolRegistry,
-						this.context,
 					);
 					sendJson(200, response);
 				} catch (error) {

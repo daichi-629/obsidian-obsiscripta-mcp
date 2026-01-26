@@ -2,6 +2,7 @@ import { Notice } from "obsidian";
 import MCPPlugin from "../main";
 import { BridgeServer } from "../mcp/server";
 import { ToolRegistry } from "../mcp/tools/registry";
+import { ToolExecutor } from "../mcp/tools/executor";
 
 // Owns the bridge server lifecycle and user-facing notices.
 export class BridgeController {
@@ -26,9 +27,14 @@ export class BridgeController {
 	}
 
 	private async startWithNotice(message: string): Promise<void> {
+		const toolContext = {
+			vault: this.plugin.app.vault,
+			app: this.plugin.app,
+			plugin: this.plugin,
+		};
+		const executor = new ToolExecutor(this.toolRegistry, toolContext);
 		this.server = new BridgeServer(
-			this.plugin,
-			this.toolRegistry,
+			executor,
 			this.plugin.settings.port,
 		);
 		try {

@@ -1,4 +1,4 @@
-import { normalizePath } from "obsidian";
+import { normalizePath, TFile, TFolder } from "obsidian";
 import { ToolRegistry, ToolSource } from "../registry";
 import { MCPToolContext, MCPToolDefinition } from "../types";
 import type MCPPlugin from "../../../main";
@@ -85,17 +85,20 @@ export class ScriptLoader {
 	}
 
 	private async ensureScriptsFolder(): Promise<void> {
-		const adapter = this.plugin.app.vault.adapter;
+		const vault = this.plugin.app.vault;
 		if (!this.scriptsPath) {
 			throw new Error("Scripts path is not set");
 		}
-		const exists = await adapter.exists(this.scriptsPath);
-		if (!exists) {
-			await adapter.mkdir(this.scriptsPath);
-			console.debug(`[Bridge] Created script folder: ${this.scriptsPath}`);
+		const existing = vault.getAbstractFileByPath(this.scriptsPath);
+		if (existing) {
+			if (existing instanceof TFolder) {
+				return;
+			}
+			throw new Error(`Scripts path exists and is not a folder: ${this.scriptsPath}`);
 		}
+		await vault.createFolder(this.scriptsPath);
+		console.debug(`[Bridge] Created script folder: ${this.scriptsPath}`);
 	}
-
 
 	private startWatching(): void {
 		this.plugin.registerEvent(this.plugin.app.vault.on("create", (file) => {
@@ -151,18 +154,20 @@ export class ScriptLoader {
 	}
 
 	private async loadScript(scriptPath: string): Promise<void> {
-		const adapter = this.plugin.app.vault.adapter;
+		const vault = this.plugin.app.vault;
 		const loader = this.getLoaderForPath(scriptPath);
 		if (!loader) {
 			return;
 		}
 
+		const file = vault.getAbstractFileByPath(scriptPath);
+		if (!file || !(file instanceof TFile)) {
+			return;
+		}
+
 		try {
-			const [source, stat] = await Promise.all([
-				adapter.read(scriptPath),
-				adapter.stat(scriptPath)
-			]);
-			const compiled = await this.compiler.compile(scriptPath, source, loader, stat?.mtime);
+			const source = await vault.read(file);
+			const compiled = await this.compiler.compile(scriptPath, source, loader, file.stat?.mtime);
 			const tool = this.executor.execute(compiled, scriptPath, this.createToolContext());
 			this.registerScriptTool(scriptPath, tool);
 		} catch (error) {
@@ -232,28 +237,31 @@ export class ScriptLoader {
 	}
 
 	private async listScriptFiles(dir: string): Promise<string[]> {
-		const adapter = this.plugin.app.vault.adapter;
+		const vault = this.plugin.app.vault;
 		const results: string[] = [];
 
 		if (!dir) {
 			return results;
 		}
 
-		const exists = await adapter.exists(dir);
-		if (!exists) {
+		const root = vault.getAbstractFileByPath(dir);
+		if (!root || !(root instanceof TFolder)) {
 			return results;
 		}
 
-		const { files, folders } = await adapter.list(dir);
-		for (const file of files) {
-			if (this.isScriptPath(file)) {
-				results.push(file);
+		const stack: TFolder[] = [root];
+		while (stack.length > 0) {
+			const folder = stack.pop();
+			if (!folder) {
+				continue;
 			}
-		}
-
-		for (const folder of folders) {
-			const nested = await this.listScriptFiles(folder);
-			results.push(...nested);
+			for (const child of folder.children) {
+				if (child instanceof TFolder) {
+					stack.push(child);
+				} else if (child instanceof TFile && this.isScriptPath(child.path)) {
+					results.push(child.path);
+				}
+			}
 		}
 
 		return results;
