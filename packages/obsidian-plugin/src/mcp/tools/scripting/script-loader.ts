@@ -177,6 +177,14 @@ export class ScriptLoader {
 			this.decrementToolRef(existingToolName);
 		}
 
+		if (this.toolRegistry.has(tool.name) && !this.toolNameCounts.has(tool.name)) {
+			console.warn(
+				`[Bridge] Script tool "${tool.name}" conflicts with a built-in tool and will not be registered`,
+			);
+			this.scriptTools.delete(scriptPath);
+			return;
+		}
+
 		this.toolRegistry.register(tool);
 		this.scriptTools.set(scriptPath, tool.name);
 		if (!existingToolName || existingToolName !== tool.name) {
