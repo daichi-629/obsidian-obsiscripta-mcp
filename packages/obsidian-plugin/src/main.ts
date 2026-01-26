@@ -1,4 +1,4 @@
-import { Notice, Plugin } from "obsidian";
+import { Notice, Platform, Plugin } from "obsidian";
 import { DEFAULT_SETTINGS, MCPPluginSettings, MCPSettingTab } from "./settings";
 import { BridgeServer } from "./mcp/server";
 import { ToolRegistry } from "./mcp/tools/registry";
@@ -14,6 +14,11 @@ export default class MCPPlugin extends Plugin {
 	private exampleManager: ExampleManager | null = null;
 
 	async onload() {
+		if (!Platform.isDesktopApp) {
+			new Notice("This plugin is desktop-only.");
+			return;
+		}
+
 		await this.loadSettings();
 
 		// Initialize tool registry

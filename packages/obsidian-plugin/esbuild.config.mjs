@@ -1,6 +1,10 @@
 import esbuild from "esbuild";
 import process from "process";
-import { builtinModules } from 'node:module';
+import { builtinModules } from "node:module";
+import { access, copyFile, readFile } from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const banner =
 `/*
@@ -10,6 +14,44 @@ if you want to view the source, please visit the github repository of this plugi
 `;
 
 const prod = (process.argv[2] === "production");
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const projectRoot = path.resolve(__dirname, "../..");
+const pluginRoot = __dirname;
+const rootPackage = JSON.parse(
+	await readFile(path.join(projectRoot, "package.json"), "utf8"),
+);
+const rootVersion = rootPackage.version ?? "0.0.0";
+
+async function copyIfExists(src, dest) {
+	try {
+		await access(src, fsConstants.F_OK);
+		await copyFile(src, dest);
+	} catch (error) {
+		if (error?.code !== "ENOENT") {
+			console.error(`[copy-static] Failed to copy ${src}:`, error);
+		}
+	}
+}
+
+const copyStaticPlugin = {
+	name: "copy-static",
+	setup(build) {
+		build.onEnd(async (result) => {
+			if (result.errors.length > 0) {
+				return;
+			}
+
+			await copyIfExists(
+				path.join(pluginRoot, "manifest.json"),
+				path.join(projectRoot, "manifest.json"),
+			);
+			await copyIfExists(
+				path.join(pluginRoot, "styles.css"),
+				path.join(projectRoot, "styles.css"),
+			);
+		});
+	},
+};
 
 const context = await esbuild.context({
 	banner: {
@@ -37,8 +79,12 @@ const context = await esbuild.context({
 	logLevel: "info",
 	sourcemap: prod ? false : "inline",
 	treeShaking: true,
-	outfile: "main.js",
+	outfile: "../../main.js",
 	minify: prod,
+	define: {
+		__BRIDGE_VERSION__: JSON.stringify(rootVersion),
+	},
+	plugins: [copyStaticPlugin],
 });
 
 if (prod) {

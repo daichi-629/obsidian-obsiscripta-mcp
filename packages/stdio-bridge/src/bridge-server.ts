@@ -3,7 +3,7 @@
  * Implements StdioBridgeServer class for MCP communication via stdio
  */
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
 	ListToolsRequestSchema,
@@ -17,6 +17,8 @@ import type {
 	MCPContent,
 } from "./types.js";
 import { PluginClient, RetryExhaustedError } from "./plugin-client.js";
+
+declare const __BRIDGE_VERSION__: string;
 
 /**
  * Default polling interval in milliseconds
@@ -33,7 +35,7 @@ const MAX_STARTUP_RETRIES = 30;
  */
 const SERVER_INFO = {
 	name: "obsidian-mcp-bridge",
-	version: "1.0.0",
+	version: __BRIDGE_VERSION__,
 } as const;
 
 /**
@@ -42,7 +44,7 @@ const SERVER_INFO = {
  * tool calls to the Obsidian plugin via Bridge API.
  */
 export class StdioBridgeServer {
-	private mcpServer: Server;
+	private mcpServer: McpServer;
 	private transport: StdioServerTransport | null = null;
 	private pollingInterval: number;
 	private pollingTimer: ReturnType<typeof setInterval> | null = null;
@@ -62,9 +64,9 @@ export class StdioBridgeServer {
 		pollingInterval: number = DEFAULT_POLLING_INTERVAL
 	) {
 		this.pollingInterval = pollingInterval;
-		this.mcpServer = new Server(SERVER_INFO, {
+		this.mcpServer = new McpServer(SERVER_INFO, {
 			capabilities: {
-				tools: {},
+				tools: { listChanged: true },
 			},
 		});
 
@@ -77,23 +79,26 @@ export class StdioBridgeServer {
 	 */
 	private setupRequestHandlers(): void {
 		// Handle tools/list requests
-		this.mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
-			const tools = Array.from(this.pollingState.tools.values()).map(
-				(tool: MCPToolDefinition) => ({
-					name: tool.name,
-					description: tool.description,
-					inputSchema: {
-						...tool.inputSchema,
-						type: "object" as const,
-					},
-				})
-			);
+		this.mcpServer.server.setRequestHandler(
+			ListToolsRequestSchema,
+			async () => {
+				const tools = Array.from(this.pollingState.tools.values()).map(
+					(tool: MCPToolDefinition) => ({
+						name: tool.name,
+						description: tool.description,
+						inputSchema: {
+							...tool.inputSchema,
+							type: "object" as const,
+						},
+					})
+				);
 
-			return { tools };
-		});
+				return { tools };
+			}
+		);
 
 		// Handle tools/call requests
-		this.mcpServer.setRequestHandler(
+		this.mcpServer.server.setRequestHandler(
 			CallToolRequestSchema,
 			async (request) => {
 				const { name, arguments: args = {} } = request.params;
