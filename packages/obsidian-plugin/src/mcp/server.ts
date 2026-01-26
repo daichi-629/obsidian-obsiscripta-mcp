@@ -42,7 +42,7 @@ export class BridgeServer {
 
 		if (!url.pathname.startsWith("/bridge/v1/")) {
 			res.writeHead(404, { "Content-Type": "application/json" });
-			res.end(JSON.stringify({ error: "Not found" }));
+			res.end(JSON.stringify({ error: "Not found", message: "Not found" }));
 			return;
 		}
 
@@ -69,6 +69,10 @@ export class BridgeServer {
 							error instanceof Error
 								? error.message
 								: "Internal server error",
+						message:
+							error instanceof Error
+								? error.message
+								: "Internal server error",
 					}),
 				);
 			}
@@ -84,11 +88,23 @@ export class BridgeServer {
 			res.writeHead(status, { "Content-Type": "application/json" });
 			res.end(JSON.stringify(payload));
 		};
+		const sendError = (
+			status: number,
+			error: string,
+			message: string = error,
+			details?: unknown,
+		) => {
+			sendJson(status, {
+				error,
+				message,
+				...(details === undefined ? {} : { details }),
+			});
+		};
 
 		try {
 			if (url.pathname === "/bridge/v1/health") {
 				if (req.method !== "GET") {
-					sendJson(405, { error: "Method not allowed" });
+					sendError(405, "Method not allowed");
 					return;
 				}
 				sendJson(200, handleHealth());
@@ -97,7 +113,7 @@ export class BridgeServer {
 
 			if (url.pathname === "/bridge/v1/tools") {
 				if (req.method !== "GET") {
-					sendJson(405, { error: "Method not allowed" });
+					sendError(405, "Method not allowed");
 					return;
 				}
 				sendJson(200, handleTools(this.toolRegistry));
@@ -109,13 +125,13 @@ export class BridgeServer {
 			);
 			if (toolCallMatch && toolCallMatch[1]) {
 				if (req.method !== "POST") {
-					sendJson(405, { error: "Method not allowed" });
+					sendError(405, "Method not allowed");
 					return;
 				}
 
 				const toolName = decodeURIComponent(toolCallMatch[1]);
 				if (!this.toolRegistry.get(toolName)) {
-					sendJson(404, { error: "Tool not found" });
+					sendError(404, "Tool not found");
 					return;
 				}
 
@@ -127,12 +143,9 @@ export class BridgeServer {
 					const message =
 						error instanceof Error ? error.message : String(error);
 					if (message === "Request body too large") {
-						sendJson(413, { error: "Request body too large" });
+						sendError(413, "Request body too large");
 					} else {
-						sendJson(400, {
-							error: "Invalid request body",
-							details: message,
-						});
+						sendError(400, "Invalid request body", "Invalid request body", message);
 					}
 					return;
 				}
@@ -150,7 +163,7 @@ export class BridgeServer {
 					typeof argsValue !== "object" ||
 					Array.isArray(argsValue)
 				) {
-					sendJson(400, { error: "Invalid request body" });
+					sendError(400, "Invalid request body");
 					return;
 				}
 
@@ -163,25 +176,25 @@ export class BridgeServer {
 					);
 					sendJson(200, response);
 				} catch (error) {
-					sendJson(500, {
-						error: "Internal server error",
-						details:
-							error instanceof Error
-								? error.message
-								: String(error),
-					});
+					sendError(
+						500,
+						"Internal server error",
+						"Internal server error",
+						error instanceof Error ? error.message : String(error),
+					);
 				}
 				return;
 			}
 
-			sendJson(404, { error: "Not found" });
+			sendError(404, "Not found");
 		} catch (error) {
 			if (!res.headersSent) {
-				sendJson(500, {
-					error: "Internal server error",
-					details:
-						error instanceof Error ? error.message : String(error),
-				});
+				sendError(
+					500,
+					"Internal server error",
+					"Internal server error",
+					error instanceof Error ? error.message : String(error),
+				);
 			}
 		}
 	}

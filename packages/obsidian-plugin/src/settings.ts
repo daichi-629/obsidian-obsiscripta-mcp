@@ -120,30 +120,5 @@ export class MCPSettingTab extends PluginSettingTab {
 					}),
 			);
 
-		// Server info section
-		new Setting(containerEl).setName("Connection info").setHeading();
-
-		const infoEl = containerEl.createEl("div", {
-			cls: "mcp-settings-info",
-		});
-
-		infoEl.createEl("p", {
-			text: `Endpoint: http://127.0.0.1:${this.plugin.settings.port}/bridge/v1`,
-			cls: "mcp-settings-info-line",
-		});
-
-		infoEl.createEl("p", {
-			text: "Bridge client config:",
-			cls: "mcp-settings-info-label",
-		});
-
-		const codeEl = infoEl.createEl("pre", { cls: "mcp-settings-code" });
-
-		const configJson = {
-			bridgeServer: {
-				baseUrl: `http://localhost:${this.plugin.settings.port}/bridge/v1`,
-			},
-		};
-		codeEl.textContent = JSON.stringify(configJson, null, 2);
 	}
 }
