@@ -6,14 +6,12 @@ import {
 } from "./settings";
 import { ToolingManager } from "./plugin/tooling-manager";
 import { BridgeController } from "./plugin/bridge-controller";
-import { PluginServices } from "./plugin/plugin-services";
 
 export default class MCPPlugin extends Plugin {
 	settings: MCPPluginSettings;
 	private settingsStore: SettingsStore;
 	private toolingManager: ToolingManager;
 	private bridgeController: BridgeController;
-	private pluginServices: PluginServices;
 
 	async onload() {
 		if (!Platform.isDesktopApp) {
@@ -41,16 +39,20 @@ export default class MCPPlugin extends Plugin {
 		await this.toolingManager.start();
 
 		this.bridgeController = new BridgeController(
-			this,
+			this.app,
+			this.app.vault,
+			{
+				autoStart: this.settings.autoStart,
+				port: this.settings.port,
+			},
 			this.toolingManager.registry,
 		);
 		await this.bridgeController.startIfEnabled();
 
-		// Create service facade for settings UI
-		this.pluginServices = new PluginServices(
+		// Inject services into settings store
+		this.settingsStore.setServices(
 			this.toolingManager,
 			this.bridgeController,
-			this.settingsStore,
 		);
 
 		// Add settings tab with dependency injection
@@ -59,7 +61,6 @@ export default class MCPPlugin extends Plugin {
 				this.app,
 				this,
 				this.settingsStore,
-				this.pluginServices,
 				this.toolingManager.getExampleManager(),
 			),
 		);
@@ -78,7 +79,7 @@ export default class MCPPlugin extends Plugin {
 			id: "restart-server",
 			name: "Restart server",
 			callback: () => {
-				void this.pluginServices.restartServer();
+				void this.settingsStore.restartServer();
 			},
 		});
 

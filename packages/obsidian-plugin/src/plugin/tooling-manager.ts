@@ -6,7 +6,7 @@ import { ToolRegistry, ToolSource } from "../mcp/tools/registry";
 import { getBuiltinNoteTools } from "../mcp/tools/builtin/notes";
 import { ScriptLoader } from "../mcp/tools/scripting/script-loader";
 import { ExampleManager } from "../mcp/tools/scripting/example-manager";
-import { EventRegistrar } from "./context";
+import { EventRegistrar, ScriptExecutionContext } from "./context";
 
 // Coordinates built-in and script tool lifecycle + registry state.
 export class ToolingManager {
@@ -14,7 +14,7 @@ export class ToolingManager {
 	private app: App;
 	private settings: MCPPluginSettings;
 	private eventRegistrar: EventRegistrar;
-	private toolContext: { vault: Vault; app: App; plugin: MCPPlugin };
+	private scriptContext: ScriptExecutionContext;
 	private exampleSourcePath: string;
 	readonly registry: ToolRegistry;
 	private scriptLoader: ScriptLoader | null = null;
@@ -33,7 +33,7 @@ export class ToolingManager {
 		this.app = app;
 		this.settings = settings;
 		this.eventRegistrar = eventRegistrar;
-		this.toolContext = { vault, app, plugin };
+		this.scriptContext = { vault, app, plugin };
 		this.exampleSourcePath = exampleSourcePath;
 		this.registry = new ToolRegistry(disabledTools);
 	}
@@ -47,7 +47,7 @@ export class ToolingManager {
 
 		this.scriptLoader = new ScriptLoader(
 			this.vault,
-			this.toolContext,
+			this.scriptContext,
 			this.eventRegistrar,
 			scriptsPath,
 			this.registry

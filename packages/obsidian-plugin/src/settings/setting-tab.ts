@@ -1,5 +1,4 @@
 import { App, PluginSettingTab, Plugin, Setting } from "obsidian";
-import { MCPPluginSettings } from "./types";
 import { SettingsStore } from "./settings-store";
 import { ToolSource } from "../mcp/tools/registry";
 import { ExampleManager } from "../mcp/tools/scripting/example-manager";
@@ -21,19 +20,16 @@ export interface SettingTabServices {
 
 export class MCPSettingTab extends PluginSettingTab {
 	private settingsStore: SettingsStore;
-	private services: SettingTabServices;
 	private exampleManager: ExampleManager | null;
 
 	constructor(
 		app: App,
 		plugin: Plugin,
 		settingsStore: SettingsStore,
-		services: SettingTabServices,
 		exampleManager: ExampleManager | null,
 	) {
 		super(app, plugin);
 		this.settingsStore = settingsStore;
-		this.services = services;
 		this.exampleManager = exampleManager;
 	}
 
@@ -79,7 +75,7 @@ export class MCPSettingTab extends PluginSettingTab {
 			.setDesc("Restart the server to apply port changes")
 			.addButton((button) =>
 				button.setButtonText("Restart").onClick(async () => {
-					await this.services.restartServer();
+					await this.settingsStore.restartServer();
 				}),
 			);
 
@@ -100,7 +96,7 @@ export class MCPSettingTab extends PluginSettingTab {
 							clearTimeout(scriptsPathTimer);
 						}
 						scriptsPathTimer = window.setTimeout(() => {
-							void this.services.updateScriptsPath(value);
+							void this.settingsStore.updateScriptsPath(value);
 							scriptsPathTimer = null;
 						}, 400);
 					}),
@@ -111,7 +107,7 @@ export class MCPSettingTab extends PluginSettingTab {
 			.setDesc("Reload all scripts from the configured folder")
 			.addButton((button) =>
 				button.setButtonText("Reload").onClick(async () => {
-					await this.services.reloadScripts();
+					await this.settingsStore.reloadScripts();
 				}),
 			);
 
@@ -132,7 +128,7 @@ export class MCPSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl).setName("Tools").setHeading();
 
-		const tools = this.services.getRegisteredTools().sort((a, b) =>
+		const tools = this.settingsStore.getRegisteredTools().sort((a, b) =>
 			a.name.localeCompare(b.name),
 		);
 
@@ -145,13 +141,13 @@ export class MCPSettingTab extends PluginSettingTab {
 		}
 
 		const builtinTools = tools.filter(
-			(tool) => this.services.getToolSource(tool.name) === ToolSource.Builtin,
+			(tool) => this.settingsStore.getToolSource(tool.name) === ToolSource.Builtin,
 		);
 		const scriptTools = tools.filter(
-			(tool) => this.services.getToolSource(tool.name) === ToolSource.Script,
+			(tool) => this.settingsStore.getToolSource(tool.name) === ToolSource.Script,
 		);
 		const unknownTools = tools.filter(
-			(tool) => this.services.getToolSource(tool.name) === ToolSource.Unknown,
+			(tool) => this.settingsStore.getToolSource(tool.name) === ToolSource.Unknown,
 		);
 
 		const renderToolToggle = (toolName: string, description: string) => {
@@ -159,9 +155,9 @@ export class MCPSettingTab extends PluginSettingTab {
 				.setName(toolName)
 				.setDesc(description)
 				.addToggle((toggle) => {
-					toggle.setValue(this.services.isToolEnabled(toolName));
+					toggle.setValue(this.settingsStore.isToolEnabled(toolName));
 					toggle.onChange(async (value) => {
-						await this.services.setToolEnabled(toolName, value);
+						await this.settingsStore.setToolEnabled(toolName, value);
 					});
 				});
 		};

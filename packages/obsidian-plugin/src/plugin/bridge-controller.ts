@@ -1,17 +1,32 @@
-import { Notice } from "obsidian";
-import MCPPlugin from "../main";
+import { App, Notice, Vault } from "obsidian";
 import { BridgeServer } from "../mcp/server";
 import { ToolRegistry } from "../mcp/tools/registry";
 import { ToolExecutor } from "../mcp/tools/executor";
+import { AppContext } from "./context";
+
+// Settings interface for bridge configuration
+interface BridgeSettings {
+	autoStart: boolean;
+	port: number;
+}
 
 // Owns the bridge server lifecycle and user-facing notices.
 export class BridgeController {
-	private plugin: MCPPlugin;
+	private app: App;
+	private vault: Vault;
+	private settings: BridgeSettings;
 	private toolRegistry: ToolRegistry;
 	private server: BridgeServer | null = null;
 
-	constructor(plugin: MCPPlugin, toolRegistry: ToolRegistry) {
-		this.plugin = plugin;
+	constructor(
+		app: App,
+		vault: Vault,
+		settings: BridgeSettings,
+		toolRegistry: ToolRegistry
+	) {
+		this.app = app;
+		this.vault = vault;
+		this.settings = settings;
 		this.toolRegistry = toolRegistry;
 	}
 
@@ -20,22 +35,21 @@ export class BridgeController {
 	}
 
 	async startIfEnabled(): Promise<void> {
-		if (!this.plugin.settings.autoStart) {
+		if (!this.settings.autoStart) {
 			return;
 		}
 		await this.start();
 	}
 
 	private async startWithNotice(message: string): Promise<void> {
-		const toolContext = {
-			vault: this.plugin.app.vault,
-			app: this.plugin.app,
-			plugin: this.plugin,
+		const toolContext: AppContext = {
+			vault: this.vault,
+			app: this.app,
 		};
 		const executor = new ToolExecutor(this.toolRegistry, toolContext);
 		this.server = new BridgeServer(
 			executor,
-			this.plugin.settings.port,
+			this.settings.port,
 		);
 		try {
 			await this.server.start();
@@ -50,7 +64,7 @@ export class BridgeController {
 
 	async start(): Promise<void> {
 		await this.startWithNotice(
-			`Bridge server started on port ${this.plugin.settings.port}`,
+			`Bridge server started on port ${this.settings.port}`,
 		);
 	}
 
@@ -64,7 +78,7 @@ export class BridgeController {
 	async restart(): Promise<void> {
 		await this.stop();
 		await this.startWithNotice(
-			`Bridge server restarted on port ${this.plugin.settings.port}`,
+			`Bridge server restarted on port ${this.settings.port}`,
 		);
 	}
 }

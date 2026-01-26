@@ -1,14 +1,14 @@
 import { normalizePath, TFile, TFolder, Vault } from "obsidian";
 import { ToolRegistry, ToolSource } from "../registry";
 import { MCPToolDefinition } from "../types";
-import { AppContext, EventRegistrar } from "../../../plugin/context";
+import { EventRegistrar, ScriptExecutionContext } from "../../../plugin/context";
 import { ScriptCompiler } from "./script-compiler";
 import { ScriptExecutor } from "./script-executor";
 
 const DEFAULT_SCRIPT_FOLDER_NAME = "mcp-tools";
 export class ScriptLoader {
 	private vault: Vault;
-	private toolContext: AppContext;
+	private scriptContext: ScriptExecutionContext;
 	private eventRegistrar: EventRegistrar;
 	private toolRegistry: ToolRegistry;
 	private compiler: ScriptCompiler;
@@ -20,13 +20,13 @@ export class ScriptLoader {
 
 	constructor(
 		vault: Vault,
-		toolContext: AppContext,
+		scriptContext: ScriptExecutionContext,
 		eventRegistrar: EventRegistrar,
 		scriptsPath: string,
 		toolRegistry: ToolRegistry
 	) {
 		this.vault = vault;
-		this.toolContext = toolContext;
+		this.scriptContext = scriptContext;
 		this.eventRegistrar = eventRegistrar;
 		this.toolRegistry = toolRegistry;
 		this.compiler = new ScriptCompiler();
@@ -274,8 +274,8 @@ export class ScriptLoader {
 		return results;
 	}
 
-	private createToolContext(): AppContext {
-		return this.toolContext;
+	private createToolContext(): ScriptExecutionContext {
+		return this.scriptContext;
 	}
 
 	private isScriptFile(filePath?: string): boolean {
