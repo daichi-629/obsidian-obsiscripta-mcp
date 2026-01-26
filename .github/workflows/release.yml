@@ -16,7 +16,7 @@ jobs:
       - name: Read manifest version
         id: version
         run: |
-          version="$(node -p "require('./manifest.json').version")"
+          version="$(node -p "require('./packages/obsidian-plugin/manifest.json').version")"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - uses: pnpm/action-setup@v4
