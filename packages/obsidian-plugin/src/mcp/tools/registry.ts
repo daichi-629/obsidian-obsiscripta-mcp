@@ -11,10 +11,10 @@ export class ToolRegistry {
 	 */
 	register(tool: MCPToolDefinition): void {
 		if (this.tools.has(tool.name)) {
-			console.warn(`[MCP] Tool "${tool.name}" already registered, overwriting`);
+			console.warn(`[Bridge] Tool "${tool.name}" already registered, overwriting`);
 		}
 		this.tools.set(tool.name, tool);
-		console.debug(`[MCP] Registered tool: ${tool.name}`);
+		console.debug(`[Bridge] Registered tool: ${tool.name}`);
 	}
 
 	/**
@@ -23,7 +23,7 @@ export class ToolRegistry {
 	unregister(name: string): boolean {
 		const deleted = this.tools.delete(name);
 		if (deleted) {
-			console.debug(`[MCP] Unregistered tool: ${name}`);
+			console.debug(`[Bridge] Unregistered tool: ${name}`);
 		}
 		return deleted;
 	}
@@ -61,6 +61,6 @@ export class ToolRegistry {
 	 */
 	clear(): void {
 		this.tools.clear();
-		console.debug("[MCP] Cleared all tools");
+		console.debug("[Bridge] Cleared all tools");
 	}
 }

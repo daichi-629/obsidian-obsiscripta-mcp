@@ -1,0 +1,28 @@
+{
+	"name": "obsidian-mcp-bridge",
+	"version": "1.0.0",
+	"description": "stdio MCP Bridge for Obsidian plugin",
+	"type": "module",
+	"main": "dist/index.js",
+	"bin": {
+		"obsidian-mcp": "./bin/obsidian-mcp.js"
+	},
+	"scripts": {
+		"build": "tsc",
+		"dev": "tsc --watch"
+	},
+	"keywords": [
+		"obsidian",
+		"mcp",
+		"bridge",
+		"claude"
+	],
+	"license": "0-BSD",
+	"devDependencies": {
+		"@types/node": "^20.0.0",
+		"typescript": "^5.8.3"
+	},
+	"dependencies": {
+		"@modelcontextprotocol/sdk": "^1.0.0"
+	}
+}

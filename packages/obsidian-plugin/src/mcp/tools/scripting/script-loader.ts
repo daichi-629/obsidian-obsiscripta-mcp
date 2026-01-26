@@ -21,7 +21,7 @@ export class ScriptLoader {
 		this.toolRegistry = toolRegistry;
 		this.compiler = new ScriptCompiler();
 		this.executor = new ScriptExecutor();
-		this.scriptsPath = this.resolveScriptsPath(this.plugin.settings?.scriptsPath);
+		this.scriptsPath = ScriptLoader.normalizeScriptsPath(this.plugin.settings?.scriptsPath);
 	}
 
 	async start(): Promise<void> {
@@ -45,7 +45,7 @@ export class ScriptLoader {
 	}
 
 	async updateScriptsPath(scriptsPath: string): Promise<void> {
-		const nextPath = this.resolveScriptsPath(scriptsPath);
+		const nextPath = ScriptLoader.normalizeScriptsPath(scriptsPath);
 		if (nextPath === this.scriptsPath) {
 			return;
 		}
@@ -68,7 +68,7 @@ export class ScriptLoader {
 		this.compiler.clear();
 	}
 
-	private resolveScriptsPath(settingPath?: string): string {
+	static normalizeScriptsPath(settingPath?: string): string {
 		const fallback = normalizePath(DEFAULT_SCRIPT_FOLDER_NAME);
 		const trimmed = settingPath?.trim();
 		if (!trimmed) {
@@ -92,7 +92,7 @@ export class ScriptLoader {
 		const exists = await adapter.exists(this.scriptsPath);
 		if (!exists) {
 			await adapter.mkdir(this.scriptsPath);
-			console.debug(`[MCP] Created script folder: ${this.scriptsPath}`);
+			console.debug(`[Bridge] Created script folder: ${this.scriptsPath}`);
 		}
 	}
 
@@ -129,7 +129,7 @@ export class ScriptLoader {
 		}
 		this.reloadTimer = window.setTimeout(() => {
 			this.reloadAllScripts().catch((error) => {
-				console.error("[MCP] Failed to reload scripts:", error);
+				console.error("[Bridge] Failed to reload scripts:", error);
 			});
 		}, 300);
 	}
@@ -145,7 +145,7 @@ export class ScriptLoader {
 		for (const [scriptPath, toolName] of this.scriptTools.entries()) {
 			if (!scriptSet.has(scriptPath)) {
 				this.unregisterScriptTool(scriptPath);
-				console.debug(`[MCP] Removed script tool: ${toolName}`);
+				console.debug(`[Bridge] Removed script tool: ${toolName}`);
 			}
 		}
 	}
@@ -166,7 +166,7 @@ export class ScriptLoader {
 			const tool = this.executor.execute(compiled, scriptPath, this.createToolContext());
 			this.registerScriptTool(scriptPath, tool);
 		} catch (error) {
-			console.error(`[MCP] Failed to load script ${scriptPath}:`, error);
+			console.error(`[Bridge] Failed to load script ${scriptPath}:`, error);
 			this.unregisterScriptTool(scriptPath);
 		}
 	}

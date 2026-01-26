@@ -52,7 +52,7 @@ export class ExampleManager {
 			await adapter.write(examplePath, content);
 			new Notice(`Copied example script to ${examplePath}`);
 		} catch (error) {
-			console.error("[MCP] Failed to copy example script:", error);
+			console.error("[Bridge] Failed to copy example script:", error);
 			new Notice("Failed to copy example script");
 		}
 	}

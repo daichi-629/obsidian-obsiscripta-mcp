@@ -1,32 +1,15 @@
 {
-	"name": "obsiscripta-mcp",
+	"name": "obsiscripta-bridge-monorepo",
 	"version": "1.0.0",
-	"description": "Extensible, script-focused MCP server for Obsidian vault operations and AI assistants",
-	"main": "main.js",
+	"private": true,
+	"description": "Monorepo for ObsiScripta Bridge - Obsidian plugin and stdio MCP bridge",
+	"packageManager": "pnpm@10.28.1",
 	"type": "module",
 	"scripts": {
-		"dev": "node esbuild.config.mjs",
-		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-		"version": "node version-bump.mjs && git add manifest.json versions.json",
-		"lint": "eslint ."
+		"build": "pnpm -r build",
+		"dev": "pnpm -r dev",
+		"lint": "pnpm -r lint"
 	},
 	"keywords": [],
-	"license": "0-BSD",
-	"devDependencies": {
-		"@eslint/js": "9.30.1",
-		"@types/node": "^16.11.6",
-		"esbuild": "0.25.5",
-		"eslint-plugin-obsidianmd": "0.1.9",
-		"globals": "14.0.0",
-		"jiti": "2.6.1",
-		"tslib": "2.4.0",
-		"typescript": "^5.8.3",
-		"typescript-eslint": "8.35.1"
-	},
-	"dependencies": {
-		"@modelcontextprotocol/sdk": "^1.25.3",
-		"obsidian": "latest",
-		"sucrase": "^3.35.1",
-		"zod": "^4.3.5"
-	}
+	"license": "0-BSD"
 }

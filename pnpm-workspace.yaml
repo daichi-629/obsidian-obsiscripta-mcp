@@ -1,0 +1,3 @@
+packages:
+  - packages/obsidian-plugin
+  - packages/stdio-bridge
