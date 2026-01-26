@@ -16,7 +16,7 @@ jobs:
       - name: Read manifest version
         id: version
         run: |
-          version="$(node -p "require('./packages/obsidian-plugin/manifest.json').version")"
+          version="$(node -p "require('./manifest.json').version")"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - uses: pnpm/action-setup@v4
@@ -73,5 +73,5 @@ jobs:
           gh release create "$tag" \
             --title="$tag" \
             --draft \
-            packages/obsidian-plugin/main.js packages/obsidian-plugin/manifest.json packages/obsidian-plugin/styles.css \
+            main.js manifest.json styles.css \
             packages/stdio-bridge/dist/pkg/*
