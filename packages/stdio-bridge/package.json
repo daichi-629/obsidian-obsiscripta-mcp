@@ -3,13 +3,15 @@
 	"version": "1.0.0",
 	"description": "stdio MCP Bridge for Obsidian plugin",
 	"type": "module",
-	"main": "dist/index.js",
+	"main": "dist/obsidian-mcp.cjs",
+	"types": "dist/index.d.ts",
 	"bin": {
-		"obsidian-mcp": "./dist/bin/obsidian-mcp.js"
+		"obsidian-mcp": "./dist/obsidian-mcp.cjs"
 	},
 	"scripts": {
-		"build": "tsc && cp -r bin dist/",
-		"dev": "tsc --watch"
+		"build": "tsc -p tsconfig.json --emitDeclarationOnly && node esbuild.config.mjs production",
+		"dev": "node esbuild.config.mjs",
+		"build:binary": "node esbuild.config.mjs production && pkg dist/obsidian-mcp.cjs"
 	},
 	"keywords": [
 		"obsidian",
@@ -20,11 +22,19 @@
 	"license": "0-BSD",
 	"devDependencies": {
 		"@types/node": "^20.0.0",
+		"pkg": "^5.8.1",
 		"typescript": "^5.8.3"
 	},
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.0.0",
 		"@obsiscripta/shared": "workspace:*"
+	},
+	"pkg": {
+		"targets": [
+			"node18-linux-x64",
+			"node18-win-x64"
+		],
+		"outputPath": "dist/pkg"
 	},
 	"engines": {
 		"node": ">=16.0.0"

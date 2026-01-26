@@ -4,7 +4,7 @@
  * CLI entry point for obsidian-mcp-bridge
  */
 
-import("../dist/index.js")
+import("../dist/obsidian-mcp.cjs")
 	.then(module => {
 		if (typeof module.default !== "function") {
 			throw new Error("CLI entry point is not exported as default.");

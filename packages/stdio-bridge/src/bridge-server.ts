@@ -9,7 +9,6 @@ import {
 	ListToolsRequestSchema,
 	CallToolRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { createRequire } from "module";
 import type {
 	MCPToolDefinition,
 	PollingState,
@@ -18,6 +17,8 @@ import type {
 	MCPContent,
 } from "./types.js";
 import { PluginClient, RetryExhaustedError } from "./plugin-client.js";
+
+declare const __BRIDGE_VERSION__: string;
 
 /**
  * Default polling interval in milliseconds
@@ -34,18 +35,8 @@ const MAX_STARTUP_RETRIES = 30;
  */
 const SERVER_INFO = {
 	name: "obsidian-mcp-bridge",
-	version: readPackageVersion(),
+	version: __BRIDGE_VERSION__,
 } as const;
-
-function readPackageVersion(): string {
-	try {
-		const require = createRequire(import.meta.url);
-		const pkg = require("../package.json") as { version?: string };
-		return pkg.version ?? "0.0.0";
-	} catch {
-		return "0.0.0";
-	}
-}
 
 /**
  * MCP stdio server that bridges to the Obsidian plugin.
