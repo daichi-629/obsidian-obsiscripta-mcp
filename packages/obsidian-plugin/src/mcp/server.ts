@@ -142,7 +142,7 @@ export class BridgeServer {
 					typeof payload === "object" &&
 					"arguments" in payload;
 				const argsValue = hasArguments
-					? (payload as ToolCallRequest).arguments
+					? payload.arguments
 					: null;
 				if (
 					!hasArguments ||
@@ -191,7 +191,7 @@ export class BridgeServer {
 			let data = "";
 			let size = 0;
 			req.setEncoding("utf8");
-			req.on("data", (chunk) => {
+			req.on("data", (chunk: string) => {
 				size += chunk.length;
 				if (size > BridgeServer.MAX_BODY_BYTES) {
 					req.destroy();

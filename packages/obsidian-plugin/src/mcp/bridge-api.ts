@@ -18,12 +18,11 @@ export function deepSort(obj: unknown): unknown {
 	if (obj !== null && typeof obj === "object") {
 		return Object.keys(obj)
 			.sort()
-			.reduce((acc, key) => {
-				const record = acc as Record<string, unknown>;
+			.reduce<Record<string, unknown>>((acc, key) => {
 				const source = obj as Record<string, unknown>;
-				record[key] = deepSort(source[key]);
+				acc[key] = deepSort(source[key]);
 				return acc;
-			}, {} as Record<string, unknown>);
+			}, {});
 	}
 	return obj;
 }
