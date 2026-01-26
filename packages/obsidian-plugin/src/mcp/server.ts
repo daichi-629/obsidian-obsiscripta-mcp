@@ -130,7 +130,10 @@ export class BridgeServer {
 				}
 
 				const toolName = decodeURIComponent(toolCallMatch[1]);
-				if (!this.toolRegistry.get(toolName)) {
+				if (
+					!this.toolRegistry.has(toolName) ||
+					!this.toolRegistry.isEnabled(toolName)
+				) {
 					sendError(404, "Tool not found");
 					return;
 				}

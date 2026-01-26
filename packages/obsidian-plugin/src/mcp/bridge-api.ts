@@ -53,7 +53,7 @@ export function handleHealth(): HealthResponse {
 
 export function handleTools(registry: ToolRegistry): ToolListResponse {
 	const tools = registry
-		.list()
+		.listEnabled()
 		.slice()
 		.sort((a, b) => a.name.localeCompare(b.name))
 		.map((tool) => ({
@@ -64,7 +64,7 @@ export function handleTools(registry: ToolRegistry): ToolListResponse {
 
 	return {
 		tools,
-		hash: computeToolsHash(registry.list())
+		hash: computeToolsHash(registry.listEnabled())
 	};
 }
 
@@ -74,6 +74,16 @@ export async function handleToolCall(
 	registry: ToolRegistry,
 	context: MCPToolContext
 ): Promise<ToolCallResponse> {
+	if (!registry.has(toolName)) {
+		return {
+			success: false,
+			content: [{
+				type: "text",
+				text: `Error: Tool "${toolName}" not found`
+			}],
+			isError: true
+		};
+	}
 	const tool = registry.get(toolName);
 	if (!tool) {
 		return {

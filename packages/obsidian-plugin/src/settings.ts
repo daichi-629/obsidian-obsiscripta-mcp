@@ -1,17 +1,20 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import MCPPlugin from "./main";
+import { ToolSource } from "./mcp/tools/registry";
 import { ExampleManager } from "./mcp/tools/scripting/example-manager";
 
 export interface MCPPluginSettings {
 	port: number;
 	autoStart: boolean;
 	scriptsPath: string;
+	disabledTools: string[];
 }
 
 export const DEFAULT_SETTINGS: MCPPluginSettings = {
 	port: 3000,
 	autoStart: true,
 	scriptsPath: "mcp-tools",
+	disabledTools: [],
 };
 
 export class MCPSettingTab extends PluginSettingTab {
@@ -122,12 +125,6 @@ export class MCPSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl).setName("Tools").setHeading();
 
-		const toolsNotice = containerEl.createEl("p", {
-			text: "Tool toggles are not available yet. This list is read-only for now.",
-			cls: "setting-item-description",
-		});
-		toolsNotice.setAttr("aria-live", "polite");
-
 		const tools = this.plugin.getRegisteredTools().sort((a, b) =>
 			a.name.localeCompare(b.name),
 		);
@@ -140,14 +137,57 @@ export class MCPSettingTab extends PluginSettingTab {
 			return;
 		}
 
-		for (const tool of tools) {
+		const builtinTools = tools.filter(
+			(tool) => this.plugin.getToolSource(tool.name) === ToolSource.Builtin,
+		);
+		const scriptTools = tools.filter(
+			(tool) => this.plugin.getToolSource(tool.name) === ToolSource.Script,
+		);
+		const unknownTools = tools.filter(
+			(tool) => this.plugin.getToolSource(tool.name) === ToolSource.Unknown,
+		);
+
+		const renderToolToggle = (toolName: string, description: string) => {
 			new Setting(containerEl)
-				.setName(tool.name)
-				.setDesc(tool.description)
+				.setName(toolName)
+				.setDesc(description)
 				.addToggle((toggle) => {
-					toggle.setValue(true);
-					toggle.setDisabled(true);
+					toggle.setValue(this.plugin.isToolEnabled(toolName));
+					toggle.onChange(async (value) => {
+						await this.plugin.setToolEnabled(toolName, value);
+					});
 				});
+		};
+
+		new Setting(containerEl).setName("Built-in tools").setHeading();
+		if (builtinTools.length === 0) {
+			containerEl.createEl("p", {
+				text: "No built-in tools registered.",
+				cls: "setting-item-description",
+			});
+		} else {
+			for (const tool of builtinTools) {
+				renderToolToggle(tool.name, tool.description);
+			}
+		}
+
+		new Setting(containerEl).setName("Script tools").setHeading();
+		if (scriptTools.length === 0) {
+			containerEl.createEl("p", {
+				text: "No script tools registered.",
+				cls: "setting-item-description",
+			});
+		} else {
+			for (const tool of scriptTools) {
+				renderToolToggle(tool.name, tool.description);
+			}
+		}
+
+		if (unknownTools.length > 0) {
+			new Setting(containerEl).setName("Other tools").setHeading();
+			for (const tool of unknownTools) {
+				renderToolToggle(tool.name, tool.description);
+			}
 		}
 	}
 }

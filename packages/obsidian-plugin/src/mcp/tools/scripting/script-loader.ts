@@ -1,5 +1,5 @@
 import { normalizePath } from "obsidian";
-import { ToolRegistry } from "../registry";
+import { ToolRegistry, ToolSource } from "../registry";
 import { MCPToolContext, MCPToolDefinition } from "../types";
 import type MCPPlugin from "../../../main";
 import { ScriptCompiler } from "./script-compiler";
@@ -185,7 +185,7 @@ export class ScriptLoader {
 			return;
 		}
 
-		this.toolRegistry.register(tool);
+		this.toolRegistry.register(tool, ToolSource.Script);
 		this.scriptTools.set(scriptPath, tool.name);
 		if (!existingToolName || existingToolName !== tool.name) {
 			this.incrementToolRef(tool.name);
