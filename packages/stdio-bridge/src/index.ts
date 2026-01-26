@@ -52,9 +52,6 @@ export default runCli;
 export { StdioBridgeServer, BridgeServer } from "./bridge-server.js";
 export { PluginClient, PluginClientError, RetryExhaustedError } from "./plugin-client.js";
 export type {
-	BridgeConfig,
-	ToolRequest,
-	ToolResponse,
 	PluginClientConfig,
 	MCPToolDefinition,
 	PollingState,
