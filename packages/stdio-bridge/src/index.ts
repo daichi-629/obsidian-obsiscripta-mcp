@@ -3,7 +3,6 @@
  */
 
 import { resolve as resolvePath } from "node:path";
-import { fileURLToPath } from "node:url";
 import { StdioBridgeServer } from "./bridge-server.js";
 import { PluginClient, PluginClientError, RetryExhaustedError } from "./plugin-client.js";
 
@@ -38,9 +37,12 @@ async function runCli() {
 	}
 }
 
-const isMain = process.argv[1]
-	? fileURLToPath(import.meta.url) === resolvePath(process.argv[1])
-	: false;
+declare const __filename: string;
+
+const isMain =
+	typeof __filename === "string" && process.argv[1]
+		? resolvePath(__filename) === resolvePath(process.argv[1])
+		: false;
 
 if (isMain) {
 	void runCli();
