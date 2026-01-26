@@ -2,6 +2,7 @@ import { Notice, Platform, Plugin } from "obsidian";
 import { DEFAULT_SETTINGS, MCPPluginSettings, MCPSettingTab } from "./settings";
 import { BridgeServer } from "./mcp/server";
 import { ToolRegistry } from "./mcp/tools/registry";
+import { MCPToolDefinition } from "./mcp/tools/types";
 import { getBuiltinNoteTools } from "./mcp/tools/builtin/notes";
 import { ScriptLoader } from "./mcp/tools/scripting/script-loader";
 import { ExampleManager } from "./mcp/tools/scripting/example-manager";
@@ -160,6 +161,10 @@ export default class MCPPlugin extends Plugin {
 			console.error("[Bridge] Failed to reload scripts:", error);
 			new Notice("Failed to reload scripts");
 		}
+	}
+
+	getRegisteredTools(): MCPToolDefinition[] {
+		return this.toolRegistry.list();
 	}
 
 	/**

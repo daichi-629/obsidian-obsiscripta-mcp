@@ -120,5 +120,34 @@ export class MCPSettingTab extends PluginSettingTab {
 					}),
 			);
 
+		new Setting(containerEl).setName("Tools").setHeading();
+
+		const toolsNotice = containerEl.createEl("p", {
+			text: "Tool toggles are not available yet. This list is read-only for now.",
+			cls: "setting-item-description",
+		});
+		toolsNotice.setAttr("aria-live", "polite");
+
+		const tools = this.plugin.getRegisteredTools().sort((a, b) =>
+			a.name.localeCompare(b.name),
+		);
+
+		if (tools.length === 0) {
+			containerEl.createEl("p", {
+				text: "No tools registered.",
+				cls: "setting-item-description",
+			});
+			return;
+		}
+
+		for (const tool of tools) {
+			new Setting(containerEl)
+				.setName(tool.name)
+				.setDesc(tool.description)
+				.addToggle((toggle) => {
+					toggle.setValue(true);
+					toggle.setDisabled(true);
+				});
+		}
 	}
 }
