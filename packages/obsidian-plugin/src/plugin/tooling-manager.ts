@@ -1,19 +1,40 @@
-import MCPPlugin from "../main";
+import { App, Vault } from "obsidian";
+import type MCPPlugin from "../main";
+import { MCPPluginSettings } from "../settings";
 import { MCPToolDefinition } from "../mcp/tools/types";
 import { ToolRegistry, ToolSource } from "../mcp/tools/registry";
 import { getBuiltinNoteTools } from "../mcp/tools/builtin/notes";
 import { ScriptLoader } from "../mcp/tools/scripting/script-loader";
 import { ExampleManager } from "../mcp/tools/scripting/example-manager";
+import { EventRegistrar } from "./context";
 
 // Coordinates built-in and script tool lifecycle + registry state.
 export class ToolingManager {
-	private plugin: MCPPlugin;
+	private vault: Vault;
+	private app: App;
+	private settings: MCPPluginSettings;
+	private eventRegistrar: EventRegistrar;
+	private toolContext: { vault: Vault; app: App; plugin: MCPPlugin };
+	private exampleSourcePath: string;
 	readonly registry: ToolRegistry;
 	private scriptLoader: ScriptLoader | null = null;
 	private exampleManager: ExampleManager | null = null;
 
-	constructor(plugin: MCPPlugin, disabledTools: string[]) {
-		this.plugin = plugin;
+	constructor(
+		vault: Vault,
+		app: App,
+		plugin: MCPPlugin,
+		settings: MCPPluginSettings,
+		eventRegistrar: EventRegistrar,
+		exampleSourcePath: string,
+		disabledTools: string[]
+	) {
+		this.vault = vault;
+		this.app = app;
+		this.settings = settings;
+		this.eventRegistrar = eventRegistrar;
+		this.toolContext = { vault, app, plugin };
+		this.exampleSourcePath = exampleSourcePath;
 		this.registry = new ToolRegistry(disabledTools);
 	}
 
@@ -22,23 +43,19 @@ export class ToolingManager {
 			this.registry.register(tool, ToolSource.Builtin);
 		}
 
-		const vault = this.plugin.app.vault;
-		const toolContext = {
-			vault: this.plugin.app.vault,
-			app: this.plugin.app,
-			plugin: this.plugin
-		};
-		const scriptsPath = this.plugin.settings?.scriptsPath ?? "";
+		const scriptsPath = this.settings.scriptsPath ?? "";
 
 		this.scriptLoader = new ScriptLoader(
-			vault,
-			toolContext,
-			this.plugin,
+			this.vault,
+			this.toolContext,
+			this.eventRegistrar,
 			scriptsPath,
 			this.registry
 		);
 		this.exampleManager = new ExampleManager(
-			this.plugin,
+			this.vault,
+			this.app.vault.adapter,
+			this.exampleSourcePath,
 			this.scriptLoader.getScriptsPathValue(),
 		);
 		try {

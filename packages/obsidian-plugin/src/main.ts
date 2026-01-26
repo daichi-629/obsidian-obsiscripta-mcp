@@ -19,8 +19,16 @@ export default class MCPPlugin extends Plugin {
 
 		await this.loadSettings();
 
+		// Calculate example source path for ExampleManager
+		const exampleSourcePath = this.getExampleSourcePath();
+
 		this.toolingManager = new ToolingManager(
+			this.app.vault,
+			this.app,
 			this,
+			this.settings,
+			this,
+			exampleSourcePath,
 			this.settings.disabledTools,
 		);
 		await this.toolingManager.start();
@@ -149,5 +157,21 @@ export default class MCPPlugin extends Plugin {
 	 */
 	async restartServer(): Promise<void> {
 		await this.bridgeController.restart();
+	}
+
+	/**
+	 * Calculate the path to the example script source file.
+	 * Returns the full path or empty string if unavailable.
+	 */
+	private getExampleSourcePath(): string {
+		const configDir = this.app.vault.configDir;
+		if (!configDir) {
+			return "";
+		}
+		const pluginId = this.manifest?.id;
+		if (!pluginId) {
+			return "";
+		}
+		return `${configDir}/plugins/${pluginId}/examples/example-tool.js`;
 	}
 }
