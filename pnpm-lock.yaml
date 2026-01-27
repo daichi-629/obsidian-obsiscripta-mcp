@@ -10,6 +10,9 @@ importers:
 
   packages/obsidian-plugin:
     dependencies:
+      '@obsiscripta/obsidian-script-loader':
+        specifier: workspace:*
+        version: link:../obsidian-script-loader
       '@obsiscripta/shared':
         specifier: workspace:*
         version: link:../shared
@@ -50,6 +53,22 @@ importers:
       typescript-eslint:
         specifier: 8.35.1
         version: 8.35.1(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)
+
+  packages/obsidian-script-loader:
+    dependencies:
+      obsidian:
+        specifier: ^1.0.0
+        version: 1.11.4(@codemirror/state@6.5.0)(@codemirror/view@6.38.6)
+      sucrase:
+        specifier: ^3.35.1
+        version: 3.35.1
+    devDependencies:
+      '@types/node':
+        specifier: ^16.11.6
+        version: 16.18.126
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
 
   packages/shared:
     devDependencies:
