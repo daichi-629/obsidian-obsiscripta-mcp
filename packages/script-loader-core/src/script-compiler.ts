@@ -1,15 +1,26 @@
 import { transform } from "sucrase";
-
-type ScriptLoaderType = "js" | "ts";
+import { ScriptLoaderType } from "./types";
 
 interface CompiledScriptCacheEntry {
 	mtime: number;
 	code: string;
 }
 
+/**
+ * Compiles TypeScript/JavaScript scripts with caching.
+ * Uses Sucrase for fast compilation without type checking.
+ */
 export class ScriptCompiler {
 	private cache: Map<string, CompiledScriptCacheEntry> = new Map();
 
+	/**
+	 * Compile a script source to JavaScript
+	 * @param path - Script file path (used as cache key)
+	 * @param source - Script source code
+	 * @param loader - Script type (js or ts)
+	 * @param mtime - Optional modification time for cache validation
+	 * @returns Compiled JavaScript code
+	 */
 	async compile(path: string, source: string, loader: ScriptLoaderType, mtime?: number): Promise<string> {
 		const cached = this.cache.get(path);
 		if (cached && mtime !== undefined && cached.mtime === mtime) {
@@ -31,10 +42,16 @@ export class ScriptCompiler {
 		return result.code;
 	}
 
+	/**
+	 * Invalidate cache entry for a specific path
+	 */
 	invalidate(path: string): void {
 		this.cache.delete(path);
 	}
 
+	/**
+	 * Clear all cached compiled scripts
+	 */
 	clear(): void {
 		this.cache.clear();
 	}

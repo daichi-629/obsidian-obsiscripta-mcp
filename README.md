@@ -84,7 +84,9 @@ Example:
 
 ```js
 export default {
-  name: "example_tool",
+  // The tool name is automatically derived from the file path.
+  // For "mcp-tools/example_tool.js", the tool name will be "example_tool".
+  // For "mcp-tools/utils/helper.js", the tool name will be "utils/helper".
   description: "Example custom tool",
   inputSchema: {
     type: "object",

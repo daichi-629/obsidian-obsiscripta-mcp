@@ -1,6 +1,6 @@
 import { Notice, Plugin } from "obsidian";
 import { MCPPluginSettings, DEFAULT_SETTINGS } from "./types";
-import { ScriptLoader } from "../mcp/tools/scripting/script-loader";
+import { ScriptLoader } from "@obsiscripta/obsidian-script-loader";
 import { SettingTabServices } from "./setting-tab";
 import { ToolingManager } from "../plugin/tooling-manager";
 import { BridgeController } from "../plugin/bridge-controller";
@@ -176,5 +176,23 @@ export class SettingsStore implements SettingTabServices {
 			throw new Error("BridgeController not initialized");
 		}
 		await this.bridgeController.restart();
+	}
+
+	isServerRunning(): boolean {
+		return this.bridgeController?.isRunning() ?? false;
+	}
+
+	async startServer(): Promise<void> {
+		if (!this.bridgeController) {
+			throw new Error("BridgeController not initialized");
+		}
+		await this.bridgeController.start();
+	}
+
+	async stopServer(): Promise<void> {
+		if (!this.bridgeController) {
+			throw new Error("BridgeController not initialized");
+		}
+		await this.bridgeController.stop();
 	}
 }

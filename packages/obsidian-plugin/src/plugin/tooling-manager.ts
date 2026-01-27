@@ -4,7 +4,12 @@ import { MCPPluginSettings } from "../settings";
 import { MCPToolDefinition } from "../mcp/tools/types";
 import { ToolRegistry, ToolSource } from "../mcp/tools/registry";
 import { getBuiltinNoteTools } from "../mcp/tools/builtin/notes";
-import { ScriptLoader } from "../mcp/tools/scripting/script-loader";
+import {
+	ScriptLoader,
+	ScriptRegistry,
+} from "@obsiscripta/obsidian-script-loader";
+import { createObsidianContextConfig } from "../mcp/tools/scripting/context-config";
+import { validateAndConvertScriptExports } from "../mcp/tools/scripting/script-validator";
 import { ExampleManager } from "../mcp/tools/scripting/example-manager";
 import { EventRegistrar, ScriptExecutionContext } from "./context";
 
@@ -17,6 +22,7 @@ export class ToolingManager {
 	private scriptContext: ScriptExecutionContext;
 	private exampleSourcePath: string;
 	readonly registry: ToolRegistry;
+	private scriptRegistry: ScriptRegistry | null = null;
 	private scriptLoader: ScriptLoader | null = null;
 	private exampleManager: ExampleManager | null = null;
 
@@ -45,18 +51,43 @@ export class ToolingManager {
 
 		const scriptsPath = this.settings.scriptsPath ?? "";
 
+		// Create runtime with Obsidian context configuration
+		const runtime = ScriptLoader.createExecutor(createObsidianContextConfig(), this.vault);
+		this.scriptRegistry = new ScriptRegistry(runtime);
+
+		// Create script loader with callbacks to bridge to tool registry
 		this.scriptLoader = new ScriptLoader(
 			this.vault,
 			this.scriptContext,
 			this.eventRegistrar,
+			this.scriptRegistry,
+			runtime,
 			scriptsPath,
-			this.registry
+			{
+				onScriptLoaded: (metadata, exports) => {
+					try {
+						// Validate and convert script exports to MCP tool definition
+						const tool = validateAndConvertScriptExports(exports, metadata.path, metadata.name);
+						this.registry.register(tool, ToolSource.Script);
+					} catch (error) {
+						console.error(`[Bridge] Invalid script exports in ${metadata.path}:`, error);
+					}
+				},
+				onScriptUnloaded: (metadata) => {
+					// Unregister tool when script is unloaded
+					this.registry.unregister(metadata.name);
+				},
+				onScriptError: (path, error) => {
+					console.error(`[Bridge] Script error in ${path}:`, error);
+				},
+			}
 		);
+
 		this.exampleManager = new ExampleManager(
 			this.vault,
 			this.app.vault.adapter,
 			this.exampleSourcePath,
-			this.scriptLoader.getScriptsPathValue(),
+			this.scriptLoader.getScriptsPath(),
 		);
 		try {
 			await this.scriptLoader.start();
@@ -99,10 +130,10 @@ export class ToolingManager {
 			return normalizedPath;
 		}
 
-		if (normalizedPath !== this.scriptLoader.getScriptsPathValue()) {
+		if (normalizedPath !== this.scriptLoader.getScriptsPath()) {
 			await this.scriptLoader.updateScriptsPath(normalizedPath);
 		}
-		const resolvedPath = this.scriptLoader.getScriptsPathValue();
+		const resolvedPath = this.scriptLoader.getScriptsPath();
 		this.exampleManager?.setScriptsPath(resolvedPath);
 		return resolvedPath;
 	}
