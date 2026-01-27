@@ -20,7 +20,6 @@ export class ScriptLoader {
 	private compiler: ScriptCompiler;
 	private executor: ScriptExecutor;
 	private callbacks: ScriptLoaderCallbacks;
-	private scriptNameCounts: Map<string, number> = new Map();
 	private reloadTimer: number | null = null;
 	private scriptsPath: string;
 
@@ -82,7 +81,6 @@ export class ScriptLoader {
 		for (const path of allPaths) {
 			this.unregisterScript(path);
 		}
-		this.scriptNameCounts.clear();
 		this.compiler.clear();
 	}
 
@@ -100,6 +98,27 @@ export class ScriptLoader {
 
 		const cleaned = normalized.replace(/^\.?\//, "");
 		return normalizePath(cleaned);
+	}
+
+	/**
+	 * Derives a tool name from the script path relative to the scripts folder.
+	 * This ensures uniqueness by design since file paths are unique.
+	 * Example: "mcp-tools/utils/helper.ts" -> "utils/helper"
+	 */
+	private deriveToolName(scriptPath: string): string {
+		// Get the path relative to scriptsPath
+		const normalizedScriptPath = scriptPath.replace(/\\/g, "/");
+		const normalizedScriptsPath = this.scriptsPath.replace(/\\/g, "/");
+
+		let relativePath = normalizedScriptPath;
+		if (normalizedScriptPath.startsWith(normalizedScriptsPath + "/")) {
+			relativePath = normalizedScriptPath.slice(normalizedScriptsPath.length + 1);
+		}
+
+		// Remove file extension (.js, .ts)
+		relativePath = relativePath.replace(/\.(js|ts)$/, "");
+
+		return relativePath;
 	}
 
 	private async ensureScriptsFolder(): Promise<void> {
@@ -187,9 +206,8 @@ export class ScriptLoader {
 			const compiled = await this.compiler.compile(scriptPath, source, loader, file.stat?.mtime);
 			const exports = this.executor.execute(compiled, scriptPath, this.scriptContext);
 
-			// Extract name from exports (consumer should provide it)
-			const exportedObject = exports as { name?: string } | undefined;
-			const name = exportedObject?.name ?? scriptPath;
+			// Derive name from script path to ensure uniqueness
+			const name = this.deriveToolName(scriptPath);
 
 			const metadata: ScriptMetadata = {
 				path: scriptPath,
@@ -207,16 +225,7 @@ export class ScriptLoader {
 	}
 
 	private registerScript(metadata: ScriptMetadata, exports: unknown): void {
-		const existingMetadata = this.scriptRegistry.get(metadata.path);
-		if (existingMetadata && existingMetadata.name !== metadata.name) {
-			this.decrementNameRef(existingMetadata.name);
-		}
-
 		this.scriptRegistry.register(metadata);
-		if (!existingMetadata || existingMetadata.name !== metadata.name) {
-			this.incrementNameRef(metadata.name);
-		}
-
 		this.callbacks.onScriptLoaded?.(metadata, exports);
 	}
 
@@ -227,25 +236,7 @@ export class ScriptLoader {
 		}
 		this.scriptRegistry.unregister(scriptPath);
 		this.compiler.invalidate(scriptPath);
-		this.decrementNameRef(metadata.name);
 		this.callbacks.onScriptUnloaded?.(metadata);
-	}
-
-	private incrementNameRef(name: string): void {
-		const count = this.scriptNameCounts.get(name) ?? 0;
-		this.scriptNameCounts.set(name, count + 1);
-	}
-
-	private decrementNameRef(name: string): void {
-		const count = this.scriptNameCounts.get(name);
-		if (count === undefined) {
-			return;
-		}
-		if (count <= 1) {
-			this.scriptNameCounts.delete(name);
-		} else {
-			this.scriptNameCounts.set(name, count - 1);
-		}
 	}
 
 	private getLoaderForPath(filePath: string): ScriptLoaderType | null {

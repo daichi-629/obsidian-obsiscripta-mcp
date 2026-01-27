@@ -30,7 +30,7 @@ export interface EventRegistrar {
 export interface ScriptMetadata {
 	/** Path to the script file */
 	path: string;
-	/** Name of the definition exported by this script */
+	/** Tool name derived from the script path relative to the watched folder */
 	name: string;
 	/** Last modification time of the script file */
 	mtime: number;
