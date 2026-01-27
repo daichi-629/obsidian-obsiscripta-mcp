@@ -23,7 +23,7 @@ export { ObsidianLogger } from "./adapters/obsidian-logger";
 // Re-export core classes for convenience
 // ============================================================================
 
-export { ScriptRegistry, ScriptCompiler, ScriptExecutor } from "@obsiscripta/script-loader-core";
+export { ScriptRegistry, ScriptCompiler, FunctionRuntime } from "@obsiscripta/script-loader-core";
 
 // ============================================================================
 // Types
@@ -39,11 +39,12 @@ export type { ScriptExecutionContext } from "./types";
  */
 export type {
 	ExecutionContextConfig,
-	ScriptExecutorOptions,
+	FunctionRuntimeOptions,
 	ScriptMetadata,
 	ScriptLoaderCallbacks,
 	ScriptLoaderType,
 	Logger,
 	PathUtils,
 	ScriptHost,
+	ScriptRuntime,
 } from "@obsiscripta/script-loader-core";

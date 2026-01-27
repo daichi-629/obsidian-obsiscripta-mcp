@@ -22,7 +22,7 @@ export class ToolingManager {
 	private scriptContext: ScriptExecutionContext;
 	private exampleSourcePath: string;
 	readonly registry: ToolRegistry;
-	private scriptRegistry: ScriptRegistry;
+	private scriptRegistry: ScriptRegistry | null = null;
 	private scriptLoader: ScriptLoader | null = null;
 	private exampleManager: ExampleManager | null = null;
 
@@ -42,7 +42,6 @@ export class ToolingManager {
 		this.scriptContext = { vault, app, plugin };
 		this.exampleSourcePath = exampleSourcePath;
 		this.registry = new ToolRegistry(disabledTools);
-		this.scriptRegistry = new ScriptRegistry();
 	}
 
 	async start(): Promise<void> {
@@ -52,8 +51,9 @@ export class ToolingManager {
 
 		const scriptsPath = this.settings.scriptsPath ?? "";
 
-		// Create executor with Obsidian context configuration
-		const executor = ScriptLoader.createExecutor(createObsidianContextConfig(), this.vault);
+		// Create runtime with Obsidian context configuration
+		const runtime = ScriptLoader.createExecutor(createObsidianContextConfig(), this.vault);
+		this.scriptRegistry = new ScriptRegistry(runtime);
 
 		// Create script loader with callbacks to bridge to tool registry
 		this.scriptLoader = new ScriptLoader(
@@ -61,7 +61,7 @@ export class ToolingManager {
 			this.scriptContext,
 			this.eventRegistrar,
 			this.scriptRegistry,
-			executor,
+			runtime,
 			scriptsPath,
 			{
 				onScriptLoaded: (metadata, exports) => {
