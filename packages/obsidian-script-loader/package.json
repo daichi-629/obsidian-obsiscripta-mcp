@@ -22,7 +22,7 @@
 		"obsidian": "^1.0.0"
 	},
 	"dependencies": {
-		"sucrase": "^3.35.1"
+		"@obsiscripta/script-loader-core": "workspace:*"
 	},
 	"devDependencies": {
 		"@types/node": "^16.11.6",

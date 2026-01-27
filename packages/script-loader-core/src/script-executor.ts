@@ -1,6 +1,5 @@
 import { createRequire } from "module";
-import path from "path";
-import { ScriptExecutionContext } from "./types";
+import { PathUtils, ScriptExecutionContext } from "./types";
 
 type RequireFn = (id: string) => unknown;
 
@@ -14,11 +13,31 @@ export interface ExecutionContextConfig {
 	provideContext: (scriptPath: string, context: ScriptExecutionContext) => Record<string, unknown>;
 }
 
+/**
+ * Options for creating a local require function
+ */
+export interface RequireOptions {
+	/** Base path for resolving absolute script paths */
+	basePath?: string;
+	/** Path utilities for path operations */
+	pathUtils: PathUtils;
+}
+
+/**
+ * Executes compiled scripts with context injection.
+ * This is the core execution engine that runs user scripts in a controlled environment.
+ *
+ * Security Note: This class uses new Function() to execute user-provided scripts.
+ * This is intentional and necessary for the dynamic script loading functionality.
+ * Scripts should only be loaded from trusted sources.
+ */
 export class ScriptExecutor {
 	private contextConfig: ExecutionContextConfig;
+	private requireOptions?: RequireOptions;
 
-	constructor(contextConfig: ExecutionContextConfig) {
+	constructor(contextConfig: ExecutionContextConfig, requireOptions?: RequireOptions) {
 		this.contextConfig = contextConfig;
+		this.requireOptions = requireOptions;
 	}
 
 	/**
@@ -27,7 +46,7 @@ export class ScriptExecutor {
 	 */
 	execute(code: string, scriptPath: string, context: ScriptExecutionContext): unknown {
 		const module = { exports: {} as Record<string, unknown> };
-		const localRequire = this.createLocalRequire(scriptPath, context);
+		const localRequire = this.createLocalRequire(scriptPath);
 		const dirname = this.getDirname(scriptPath);
 
 		// Get context variables from configuration
@@ -42,6 +61,7 @@ export class ScriptExecutor {
 		const contextArgs = this.contextConfig.variableNames.map(name => contextVars[name]);
 		const allArgs = [...baseArgs, ...contextArgs];
 
+		// Execute the script code in a function scope
 		// eslint-disable-next-line @typescript-eslint/no-implied-eval
 		const runner = new Function(...allParams, code);
 		runner(...allArgs);
@@ -63,23 +83,31 @@ export class ScriptExecutor {
 	): unknown {
 		const contextVars = this.contextConfig.provideContext(scriptPath, context);
 		// Bind context variables to the function
-		// This is a simplified implementation - you may want to enhance this
 		return fn.apply(contextVars, args);
 	}
 
-	private createLocalRequire(scriptPath: string, context: ScriptExecutionContext): RequireFn | undefined {
+	/**
+	 * Create a local require function scoped to the script's directory
+	 */
+	private createLocalRequire(scriptPath: string): RequireFn | undefined {
 		const globalRequire = this.getGlobalRequire();
 		if (!globalRequire) {
 			return undefined;
 		}
-		const adapter = context.vault.adapter as { getBasePath?: () => string };
-		const basePath = adapter.getBasePath?.();
+
+		if (!this.requireOptions) {
+			return globalRequire;
+		}
+
+		const { basePath, pathUtils } = this.requireOptions;
 		if (!basePath) {
 			return globalRequire;
 		}
-		const absoluteScriptPath = path.isAbsolute(scriptPath)
+
+		const absoluteScriptPath = pathUtils.isAbsolute(scriptPath)
 			? scriptPath
-			: path.join(basePath, scriptPath);
+			: pathUtils.join(basePath, scriptPath);
+
 		try {
 			return createRequire(absoluteScriptPath) as unknown as RequireFn;
 		} catch {
@@ -87,6 +115,9 @@ export class ScriptExecutor {
 		}
 	}
 
+	/**
+	 * Get the global require function if available
+	 */
 	private getGlobalRequire(): RequireFn | undefined {
 		const globalRequire = (globalThis as { require?: unknown }).require;
 		if (typeof globalRequire === "function") {
@@ -95,7 +126,14 @@ export class ScriptExecutor {
 		return undefined;
 	}
 
+	/**
+	 * Get the directory name from a script path
+	 */
 	private getDirname(scriptPath: string): string {
+		if (this.requireOptions?.pathUtils) {
+			return this.requireOptions.pathUtils.dirname(scriptPath);
+		}
+		// Fallback implementation
 		const normalized = scriptPath.replace(/\\/g, "/");
 		const lastSlash = normalized.lastIndexOf("/");
 		if (lastSlash === -1) {

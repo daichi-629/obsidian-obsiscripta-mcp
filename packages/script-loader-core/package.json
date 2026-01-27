@@ -1,0 +1,31 @@
+{
+	"name": "@obsiscripta/script-loader-core",
+	"version": "0.1.0",
+	"description": "Platform-independent script loading core for dynamic tool systems",
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"type": "module",
+	"scripts": {
+		"build": "tsc",
+		"dev": "tsc --watch",
+		"lint": "eslint .",
+		"test": "vitest run",
+		"test:watch": "vitest"
+	},
+	"keywords": [
+		"script-loader",
+		"typescript",
+		"dynamic-loading",
+		"hot-reload",
+		"platform-independent"
+	],
+	"license": "0-BSD",
+	"dependencies": {
+		"sucrase": "^3.35.1"
+	},
+	"devDependencies": {
+		"@types/node": "^16.11.6",
+		"typescript": "^5.8.3",
+		"vitest": "^2.1.8"
+	}
+}

@@ -1,57 +1,49 @@
 // ============================================================================
-// Core Classes
+// Obsidian-specific wrapper and adapters
 // ============================================================================
 
 /**
- * Main orchestrator for script loading and watching
+ * Main Obsidian script loader (wraps core with adapters)
  */
 export { ScriptLoader } from "./script-loader";
 
 /**
- * Registry for tracking loaded scripts
+ * Event registration interface for Obsidian plugins
  */
-export { ScriptRegistry } from "./script-registry";
+export type { EventRegistrar } from "./adapters/obsidian-vault-adapter";
 
 /**
- * TypeScript/JavaScript compiler with caching
+ * Obsidian adapters for core interfaces
  */
-export { ScriptCompiler } from "./script-compiler";
+export { ObsidianVaultAdapter } from "./adapters/obsidian-vault-adapter";
+export { ObsidianPathUtils } from "./adapters/obsidian-path-utils";
+export { ObsidianLogger } from "./adapters/obsidian-logger";
 
-/**
- * Script executor with context injection
- */
-export { ScriptExecutor } from "./script-executor";
+// ============================================================================
+// Re-export core classes for convenience
+// ============================================================================
+
+export { ScriptRegistry, ScriptCompiler, ScriptExecutor } from "@obsiscripta/script-loader-core";
 
 // ============================================================================
 // Types
 // ============================================================================
 
 /**
- * Configuration for script execution context
- */
-export type { ExecutionContextConfig } from "./script-executor";
-
-/**
- * Context for script execution
+ * Obsidian-specific execution context
  */
 export type { ScriptExecutionContext } from "./types";
 
 /**
- * Event registration interface for lifecycle management
+ * Re-export core types
  */
-export type { EventRegistrar } from "./types";
-
-/**
- * Metadata for a loaded script
- */
-export type { ScriptMetadata } from "./types";
-
-/**
- * Callbacks for script lifecycle events
- */
-export type { ScriptLoaderCallbacks } from "./types";
-
-/**
- * Script file type (js or ts)
- */
-export type { ScriptLoaderType } from "./types";
+export type {
+	ExecutionContextConfig,
+	RequireOptions,
+	ScriptMetadata,
+	ScriptLoaderCallbacks,
+	ScriptLoaderType,
+	Logger,
+	PathUtils,
+	ScriptHost,
+} from "@obsiscripta/script-loader-core";
