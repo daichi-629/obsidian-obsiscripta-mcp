@@ -65,4 +65,16 @@ export class PluginServices implements SettingTabServices {
 	async restartServer(): Promise<void> {
 		await this.bridgeController.restart();
 	}
+
+	isServerRunning(): boolean {
+		return this.bridgeController.isRunning();
+	}
+
+	async startServer(): Promise<void> {
+		await this.bridgeController.start();
+	}
+
+	async stopServer(): Promise<void> {
+		await this.bridgeController.stop();
+	}
 }
