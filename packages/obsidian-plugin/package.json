@@ -5,7 +5,7 @@
 	"main": "main.js",
 	"type": "module",
 	"scripts": {
-		"prebuild": "pnpm --filter @obsiscripta/shared run build",
+		"prebuild": "pnpm --filter @obsiscripta/shared run build && pnpm --filter @obsiscripta/script-loader-core run build && pnpm --filter @obsiscripta/obsidian-script-loader run build",
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"version": "node ../../scripts/sync-version.mjs",

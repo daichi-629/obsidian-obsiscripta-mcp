@@ -1,6 +1,6 @@
 import { Notice, Plugin } from "obsidian";
 import { MCPPluginSettings, DEFAULT_SETTINGS } from "./types";
-import { ScriptLoader } from "../mcp/tools/scripting/script-loader";
+import { ScriptLoader } from "@obsiscripta/obsidian-script-loader";
 import { SettingTabServices } from "./setting-tab";
 import { ToolingManager } from "../plugin/tooling-manager";
 import { BridgeController } from "../plugin/bridge-controller";

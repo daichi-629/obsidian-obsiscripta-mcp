@@ -21,8 +21,9 @@ export interface AppContext {
  * Includes the plugin instance which is exposed to user scripts as a runtime API.
  * Scripts can access the plugin through closure, even though tool handlers
  * only receive the minimal AppContext.
+ * Extends Record to be compatible with script-loader's ScriptExecutionContext type.
  */
-export interface ScriptExecutionContext extends AppContext {
+export interface ScriptExecutionContext extends AppContext, Record<string, unknown> {
 	/** Plugin instance exposed to user scripts */
 	plugin: MCPPlugin;
 }
