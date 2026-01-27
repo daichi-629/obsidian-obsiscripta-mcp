@@ -30,7 +30,6 @@ import { Plugin } from "obsidian";
 import {
   ScriptLoader,
   ScriptRegistry,
-  ScriptExecutor,
   ExecutionContextConfig,
 } from "@obsiscripta/obsidian-script-loader";
 
@@ -39,8 +38,6 @@ export default class MyPlugin extends Plugin {
   private scriptRegistry: ScriptRegistry;
 
   async onload() {
-    this.scriptRegistry = new ScriptRegistry();
-
     // Configure what variables to inject into scripts
     const contextConfig: ExecutionContextConfig = {
       variableNames: ["app", "vault", "plugin"],
@@ -51,7 +48,8 @@ export default class MyPlugin extends Plugin {
       }),
     };
 
-    const executor = new ScriptExecutor(contextConfig);
+    const runtime = ScriptLoader.createRuntime(contextConfig, this.app.vault);
+    this.scriptRegistry = new ScriptRegistry(runtime);
 
     this.scriptLoader = new ScriptLoader(
       this.app.vault,
@@ -62,7 +60,7 @@ export default class MyPlugin extends Plugin {
       },
       this, // EventRegistrar
       this.scriptRegistry,
-      executor,
+      runtime,
       "my-scripts", // folder name
       {
         onScriptLoaded: (metadata, exports) => {
@@ -85,7 +83,7 @@ export default class MyPlugin extends Plugin {
   }
 
   onunload() {
-    this.scriptLoader.stop();
+    void this.scriptLoader.stop();
   }
 }
 ```
@@ -159,7 +157,7 @@ const contextConfig: ExecutionContextConfig = {
   }),
 };
 
-const executor = new ScriptExecutor(contextConfig);
+const runtime = ScriptLoader.createRuntime(contextConfig, this.app.vault);
 ```
 
 ### Injecting Additional APIs
@@ -197,13 +195,13 @@ class ScriptLoader {
     scriptContext: ScriptExecutionContext,
     eventRegistrar: EventRegistrar,
     scriptRegistry: ScriptRegistry,
-    executor: ScriptExecutor,
+    runtime: ScriptRuntime,
     scriptsPath: string,
     callbacks?: ScriptLoaderCallbacks
   );
 
   start(): Promise<void>;
-  stop(): void;
+  stop(): Promise<void>;
   updateScriptsPath(scriptsPath: string): Promise<void>;
   reloadScripts(): Promise<void>;
   getScriptsPath(): string;
@@ -217,6 +215,7 @@ Central registry for tracking loaded scripts.
 
 ```typescript
 class ScriptRegistry {
+  constructor(runtime: ScriptRuntime);
   register(metadata: ScriptMetadata): void;
   unregister(path: string): void;
   get(path: string): ScriptMetadata | undefined;
@@ -229,17 +228,18 @@ class ScriptRegistry {
 }
 ```
 
-### ScriptExecutor
+### FunctionRuntime
 
 Executes compiled scripts with context injection and returns whatever the script exports.
 
 ```typescript
-class ScriptExecutor {
-  constructor(contextConfig: ExecutionContextConfig);
-  // Execute script and return exports (default export or module.exports)
-  execute(code: string, scriptPath: string, context: ScriptExecutionContext): unknown;
-  // Execute a function in the configured context
-  executeFunction(fn: Function, scriptPath: string, context: ScriptExecutionContext, ...args: unknown[]): unknown;
+class FunctionRuntime {
+  constructor(contextConfig: ExecutionContextConfig, options?: FunctionRuntimeOptions);
+  load(code: string, scriptPath: string, context: ScriptExecutionContext): Promise<ScriptHandle>;
+  invokeById(scriptId: string, exportPath: string, args: unknown[]): Promise<unknown>;
+  getExportById(scriptId: string, exportPath: string): Promise<unknown>;
+  unload(scriptId: string): Promise<void>;
+  dispose(): Promise<void>;
 }
 ```
 

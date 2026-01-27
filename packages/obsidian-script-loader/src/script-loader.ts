@@ -63,8 +63,8 @@ export class ScriptLoader {
 	/**
 	 * Stop the script loader
 	 */
-	stop(): void {
-		this.core.stop();
+	async stop(): Promise<void> {
+		await this.core.stop();
 	}
 
 	/**
@@ -111,13 +111,24 @@ export class ScriptLoader {
 	/**
 	 * Create a ScriptRuntime with Obsidian-specific configuration
 	 */
+	static createRuntime(
+		contextConfig: ExecutionContextConfig,
+		_vault: Vault,
+		options?: FunctionRuntimeOptions
+	): ScriptRuntime {
+		const pathUtils = options?.pathUtils ?? new ObsidianPathUtils();
+		const runtimeOptions: FunctionRuntimeOptions = { ...options, pathUtils };
+
+		return new FunctionRuntime(contextConfig, runtimeOptions);
+	}
+
+	/**
+	 * Backward-compatible alias for createRuntime
+	 */
 	static createExecutor(
 		contextConfig: ExecutionContextConfig,
 		_vault: Vault
 	): ScriptRuntime {
-		const pathUtils = new ObsidianPathUtils();
-		const options: FunctionRuntimeOptions = { pathUtils };
-
-		return new FunctionRuntime(contextConfig, options);
+		return ScriptLoader.createRuntime(contextConfig, _vault);
 	}
 }

@@ -80,7 +80,7 @@ export class MCPSettingTab extends PluginSettingTab {
 				toggle
 					.setValue(settings.autoStart)
 					.onChange(async (value) => {
-						await this.settingsStore.updateSetting("autoStart", value);
+						await this.settingsStore.updateAutoStart(value);
 					}),
 			);
 
@@ -94,7 +94,7 @@ export class MCPSettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						const port = parseInt(value, 10);
 						if (!isNaN(port) && port > 0 && port < 65536) {
-							await this.settingsStore.updateSetting("port", port);
+							await this.settingsStore.updatePort(port);
 						}
 					}),
 			);

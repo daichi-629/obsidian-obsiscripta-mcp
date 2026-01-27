@@ -34,6 +34,10 @@ export class BridgeController {
 		return this.server?.isRunning() ?? false;
 	}
 
+	updateSettings(next: Partial<BridgeSettings>): void {
+		this.settings = { ...this.settings, ...next };
+	}
+
 	async startIfEnabled(): Promise<void> {
 		if (!this.settings.autoStart) {
 			return;

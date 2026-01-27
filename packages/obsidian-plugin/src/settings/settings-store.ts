@@ -83,6 +83,18 @@ export class SettingsStore implements SettingTabServices {
 		await this.save();
 	}
 
+	async updateAutoStart(value: boolean): Promise<void> {
+		this.settings.autoStart = value;
+		await this.save();
+		this.bridgeController?.updateSettings({ autoStart: value });
+	}
+
+	async updatePort(value: number): Promise<void> {
+		this.settings.port = value;
+		await this.save();
+		this.bridgeController?.updateSettings({ port: value });
+	}
+
 	/**
 	 * Add a tool to the disabled list.
 	 */

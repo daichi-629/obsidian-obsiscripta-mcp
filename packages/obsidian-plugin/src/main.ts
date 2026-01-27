@@ -93,7 +93,9 @@ export default class MCPPlugin extends Plugin {
 	}
 
 	private async handleUnload(): Promise<void> {
-		this.toolingManager?.stop();
+		if (this.toolingManager) {
+			await this.toolingManager.stop();
+		}
 		if (this.bridgeController) {
 			await this.bridgeController.stop();
 			console.debug("[Bridge] Server stopped on plugin unload");
