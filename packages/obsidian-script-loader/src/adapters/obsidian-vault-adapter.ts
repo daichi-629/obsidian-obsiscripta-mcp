@@ -122,14 +122,24 @@ export class ObsidianVaultAdapter implements ScriptHost {
 	}
 
 	async ensureDirectory(path: string): Promise<void> {
-		const existing = this.vault.getAbstractFileByPath(path);
+		const normalizedPath = normalizePath(path);
+		const existing = this.vault.getAbstractFileByPath(normalizedPath);
 		if (existing) {
 			if (existing instanceof TFolder) {
 				return;
 			}
-			throw new Error(`Path exists and is not a folder: ${path}`);
+			throw new Error(`Path exists and is not a folder: ${normalizedPath}`);
 		}
-		await this.vault.createFolder(path);
+		try {
+			await this.vault.createFolder(normalizedPath);
+		} catch (error) {
+			// Obsidian can throw "Folder already exists." for existing paths (e.g. trailing slash or race).
+			const retry = this.vault.getAbstractFileByPath(normalizedPath);
+			if (retry instanceof TFolder) {
+				return;
+			}
+			throw error;
+		}
 	}
 
 	private isScriptFile(filePath: string): boolean {
