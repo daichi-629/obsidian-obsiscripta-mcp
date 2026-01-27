@@ -289,6 +289,10 @@ export class BridgeServer {
 		if (this.httpServer) {
 			return new Promise((resolve) => {
 				const server = this.httpServer;
+				if (!server) {
+					resolve();
+					return;
+				}
 				this.httpServer = null;
 				for (const socket of this.sockets) {
 					socket.destroy();
