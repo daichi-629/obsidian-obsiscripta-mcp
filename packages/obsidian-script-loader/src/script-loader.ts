@@ -112,7 +112,7 @@ export class ScriptLoader {
 	 */
 	static createExecutor(
 		contextConfig: ExecutionContextConfig,
-		vault: Vault
+		_vault: Vault
 	): ScriptExecutor {
 		const pathUtils = new ObsidianPathUtils();
 		const options: ScriptExecutorOptions = { pathUtils };

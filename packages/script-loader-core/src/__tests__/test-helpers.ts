@@ -90,7 +90,7 @@ export class MockScriptHost implements ScriptHost {
 		return this.files.has(path);
 	}
 
-	async ensureDirectory(_path: string): Promise<void> {
+	async ensureDirectory(_: string): Promise<void> {
 		// Mock implementation - always succeeds
 	}
 }
@@ -131,7 +131,7 @@ export class MockPathUtils implements PathUtils {
 		const upCount = fromParts.length - i;
 		const remainingPath = toParts.slice(i);
 
-		return [...Array(upCount).fill(".."), ...remainingPath].join("/") || ".";
+		return [...Array<string>(upCount).fill(".."), ...remainingPath].join("/") || ".";
 	}
 }
 

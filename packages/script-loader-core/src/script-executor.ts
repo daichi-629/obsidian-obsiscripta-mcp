@@ -59,7 +59,6 @@ export class ScriptExecutor {
 		const allArgs = [...baseArgs, ...contextArgs];
 
 		// Execute the script code in a function scope
-		// eslint-disable-next-line @typescript-eslint/no-implied-eval
 		const runner = new Function(...allParams, code);
 		runner(...allArgs);
 

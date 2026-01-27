@@ -8,9 +8,8 @@ import {
 	MockPathUtils,
 	MockLogger,
 	delay,
-	waitFor,
 } from "./test-helpers";
-import type { ScriptMetadata, ScriptLoaderCallbacks } from "../types";
+import type { ScriptLoaderCallbacks } from "../types";
 
 /**
  * ScriptLoaderCore Tests
