@@ -177,4 +177,22 @@ export class SettingsStore implements SettingTabServices {
 		}
 		await this.bridgeController.restart();
 	}
+
+	isServerRunning(): boolean {
+		return this.bridgeController?.isRunning() ?? false;
+	}
+
+	async startServer(): Promise<void> {
+		if (!this.bridgeController) {
+			throw new Error("BridgeController not initialized");
+		}
+		await this.bridgeController.start();
+	}
+
+	async stopServer(): Promise<void> {
+		if (!this.bridgeController) {
+			throw new Error("BridgeController not initialized");
+		}
+		await this.bridgeController.stop();
+	}
 }

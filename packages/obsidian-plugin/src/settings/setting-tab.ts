@@ -16,6 +16,9 @@ export interface SettingTabServices {
 	getToolSource(name: string): ToolSource;
 	setToolEnabled(name: string, enabled: boolean): Promise<void>;
 	restartServer(): Promise<void>;
+	isServerRunning(): boolean;
+	startServer(): Promise<void>;
+	stopServer(): Promise<void>;
 }
 
 export class MCPSettingTab extends PluginSettingTab {
@@ -55,6 +58,32 @@ export class MCPSettingTab extends PluginSettingTab {
 
 		const settings = this.settingsStore.getSettings();
 
+		// Server status indicator
+		const statusSetting = new Setting(containerEl)
+			.setName("Server status")
+			.setDesc("");
+
+		const updateServerStatus = () => {
+			const isRunning = this.settingsStore.isServerRunning();
+			statusSetting.setDesc(
+				isRunning
+					? `🟢 Running on port ${settings.port}`
+					: "🔴 Stopped",
+			);
+		};
+		updateServerStatus();
+
+		new Setting(containerEl)
+			.setName("Auto-start server")
+			.setDesc("Automatically start the server when Obsidian launches")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(settings.autoStart)
+					.onChange(async (value) => {
+						await this.settingsStore.updateSetting("autoStart", value);
+					}),
+			);
+
 		new Setting(containerEl)
 			.setName("Port")
 			.setDesc("The port number for the server (requires restart)")
@@ -71,11 +100,28 @@ export class MCPSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Restart server")
-			.setDesc("Restart the server to apply port changes")
+			.setName("Server control")
+			.setDesc("Start, stop, or restart the server")
+			.addButton((button) =>
+				button
+					.setButtonText("Start")
+					.onClick(async () => {
+						await this.settingsStore.startServer();
+						updateServerStatus();
+					}),
+			)
+			.addButton((button) =>
+				button
+					.setButtonText("Stop")
+					.onClick(async () => {
+						await this.settingsStore.stopServer();
+						updateServerStatus();
+					}),
+			)
 			.addButton((button) =>
 				button.setButtonText("Restart").onClick(async () => {
 					await this.settingsStore.restartServer();
+					updateServerStatus();
 				}),
 			);
 
