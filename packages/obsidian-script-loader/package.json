@@ -1,0 +1,31 @@
+{
+	"name": "@obsiscripta/obsidian-script-loader",
+	"version": "0.1.0",
+	"description": "Reusable script loading library for Obsidian plugins",
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"type": "module",
+	"scripts": {
+		"build": "tsc",
+		"dev": "tsc --watch",
+		"lint": "eslint ."
+	},
+	"keywords": [
+		"obsidian",
+		"obsidian-plugin",
+		"script-loader",
+		"typescript",
+		"hot-reload"
+	],
+	"license": "0-BSD",
+	"peerDependencies": {
+		"obsidian": "^1.0.0"
+	},
+	"dependencies": {
+		"sucrase": "^3.35.1"
+	},
+	"devDependencies": {
+		"@types/node": "^16.11.6",
+		"typescript": "^5.8.3"
+	}
+}
