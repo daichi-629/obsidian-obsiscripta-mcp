@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ScriptLoaderCore } from "../script-loader-core";
 import { ScriptRegistry } from "../script-registry";
 import { ScriptCompiler } from "../script-compiler";
-import { ScriptExecutor, type ExecutionContextConfig } from "../script-executor";
+import { FunctionRuntime, type ExecutionContextConfig } from "../function-runtime";
 import {
 	MockScriptHost,
 	MockPathUtils,
@@ -24,7 +24,7 @@ describe("ScriptLoaderCore - Desired Behavior", () => {
 	let logger: MockLogger;
 	let registry: ScriptRegistry;
 	let compiler: ScriptCompiler;
-	let executor: ScriptExecutor;
+	let runtime: FunctionRuntime;
 	let callbacks: ScriptLoaderCallbacks;
 	let loader: ScriptLoaderCore;
 
@@ -32,14 +32,14 @@ describe("ScriptLoaderCore - Desired Behavior", () => {
 		scriptHost = new MockScriptHost();
 		pathUtils = new MockPathUtils();
 		logger = new MockLogger();
-		registry = new ScriptRegistry();
 		compiler = new ScriptCompiler();
 
 		const contextConfig: ExecutionContextConfig = {
 			variableNames: ["testContext"],
 			provideContext: () => ({ testContext: { value: "test" } }),
 		};
-		executor = new ScriptExecutor(contextConfig, { pathUtils });
+		runtime = new FunctionRuntime(contextConfig, { pathUtils });
+		registry = new ScriptRegistry(runtime);
 
 		callbacks = {
 			onScriptLoaded: vi.fn(),
@@ -55,7 +55,7 @@ describe("ScriptLoaderCore - Desired Behavior", () => {
 			logger,
 			registry,
 			compiler,
-			executor,
+			runtime,
 			{},
 			scriptsPath,
 			callbacks,
@@ -294,7 +294,7 @@ describe("ScriptLoaderCore - Desired Behavior", () => {
 			loader = createLoader();
 			await loader.start();
 
-			loader.stop();
+			await loader.stop();
 
 			// Trigger should have no effect after stop
 			scriptHost.setFile("mcp-tools/tool.ts", "export default {};", 1000);
@@ -315,7 +315,7 @@ describe("ScriptLoaderCore - Desired Behavior", () => {
 
 			expect(registry.count()).toBe(2);
 
-			loader.stop();
+			await loader.stop();
 
 			expect(registry.count()).toBe(0);
 			expect(callbacks.onScriptUnloaded).toHaveBeenCalledTimes(2);
@@ -327,7 +327,7 @@ describe("ScriptLoaderCore - Desired Behavior", () => {
 
 			loader = createLoader();
 			await loader.start();
-			loader.stop();
+			await loader.stop();
 			await loader.start();
 
 			expect(registry.count()).toBe(1);
@@ -480,7 +480,8 @@ describe("ScriptLoaderCore - Desired Behavior", () => {
 				variableNames: ["ctx"],
 				provideContext: () => ({ ctx: contextValue }),
 			};
-			executor = new ScriptExecutor(contextConfig, { pathUtils });
+			const customRuntime = new FunctionRuntime(contextConfig, { pathUtils });
+			const customRegistry = new ScriptRegistry(customRuntime);
 
 			scriptHost.setFile(
 				"mcp-tools/tool.ts",
@@ -492,9 +493,9 @@ describe("ScriptLoaderCore - Desired Behavior", () => {
 				scriptHost,
 				pathUtils,
 				logger,
-				registry,
+				customRegistry,
 				compiler,
-				executor,
+				customRuntime,
 				{},
 				"mcp-tools",
 				callbacks

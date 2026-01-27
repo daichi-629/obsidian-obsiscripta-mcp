@@ -30,6 +30,7 @@ export default tseslint.config(
 			"node_modules/**",
 			"dist/**",
 			"*.config.{js,mjs,ts,mts}",
+			"*.d.ts",
 		],
 	},
 );

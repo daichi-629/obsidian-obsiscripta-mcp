@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { ScriptRegistry } from "../script-registry";
 import type { ScriptMetadata } from "../types";
+import type { ScriptRuntime } from "../runtime";
 
 /**
  * ScriptRegistry Tests
@@ -12,9 +13,16 @@ import type { ScriptMetadata } from "../types";
 
 describe("ScriptRegistry - Desired Behavior", () => {
 	let registry: ScriptRegistry;
+	let mockRuntime: ScriptRuntime;
 
 	beforeEach(() => {
-		registry = new ScriptRegistry();
+		// Create a minimal mock runtime for registry tests
+		mockRuntime = {
+			load: async () => ({ id: "mock", exports: {} }),
+			invokeById: async () => undefined,
+			getExportById: async () => undefined,
+		};
+		registry = new ScriptRegistry(mockRuntime);
 	});
 
 	describe("Script Registration Contract", () => {

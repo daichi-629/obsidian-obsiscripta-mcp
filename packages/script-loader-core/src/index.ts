@@ -18,18 +18,38 @@ export { ScriptRegistry } from "./script-registry";
 export { ScriptCompiler } from "./script-compiler";
 
 /**
- * Script executor with context injection
+ * Script executor with context injection (deprecated - use FunctionRuntime)
  */
 export { ScriptExecutor } from "./script-executor";
+
+/**
+ * Function-based script runtime
+ */
+export { FunctionRuntime } from "./function-runtime";
 
 // ============================================================================
 // Types and Interfaces
 // ============================================================================
 
 /**
+ * Runtime abstraction for script execution
+ */
+export type { ScriptRuntime, ScriptHandle } from "./runtime";
+
+/**
  * Configuration for script execution context
  */
-export type { ExecutionContextConfig, ScriptExecutorOptions } from "./script-executor";
+export type { ExecutionContextConfig } from "./function-runtime";
+
+/**
+ * Options for ScriptExecutor (deprecated - use FunctionRuntimeOptions)
+ */
+export type { ScriptExecutorOptions } from "./script-executor";
+
+/**
+ * Options for FunctionRuntime
+ */
+export type { FunctionRuntimeOptions } from "./function-runtime";
 
 /**
  * Abstract interfaces for platform adaptation

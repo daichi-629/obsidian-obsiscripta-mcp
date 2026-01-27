@@ -10,7 +10,7 @@ import {
 } from "./types";
 import { ScriptRegistry } from "./script-registry";
 import { ScriptCompiler } from "./script-compiler";
-import { ScriptExecutor } from "./script-executor";
+import { ScriptRuntime } from "./runtime";
 
 const DEFAULT_RELOAD_DEBOUNCE_MS = 300;
 
@@ -24,7 +24,7 @@ export class ScriptLoaderCore {
 	private logger: Logger;
 	private scriptRegistry: ScriptRegistry;
 	private compiler: ScriptCompiler;
-	private executor: ScriptExecutor;
+	private runtime: ScriptRuntime;
 	private scriptContext: ScriptExecutionContext;
 	private callbacks: ScriptLoaderCallbacks;
 	private reloadTimer: number | null = null;
@@ -38,7 +38,7 @@ export class ScriptLoaderCore {
 		logger: Logger,
 		scriptRegistry: ScriptRegistry,
 		compiler: ScriptCompiler,
-		executor: ScriptExecutor,
+		runtime: ScriptRuntime,
 		scriptContext: ScriptExecutionContext,
 		scriptsPath: string,
 		callbacks?: ScriptLoaderCallbacks,
@@ -49,7 +49,7 @@ export class ScriptLoaderCore {
 		this.logger = logger;
 		this.scriptRegistry = scriptRegistry;
 		this.compiler = compiler;
-		this.executor = executor;
+		this.runtime = runtime;
 		this.scriptContext = scriptContext;
 		this.callbacks = callbacks ?? {};
 		this.scriptsPath = this.normalizeScriptsPath(scriptsPath);
@@ -60,6 +60,11 @@ export class ScriptLoaderCore {
 	 * Start the script loader: ensure scripts folder, load all scripts, start watching
 	 */
 	async start(): Promise<void> {
+		// Initialize runtime if it has an initialize method
+		if (this.runtime.initialize) {
+			await this.runtime.initialize();
+		}
+
 		await this.ensureScriptsFolder();
 		await this.reloadAllScripts();
 		this.startWatching();
@@ -68,7 +73,7 @@ export class ScriptLoaderCore {
 	/**
 	 * Stop the script loader: stop watching, unregister all scripts
 	 */
-	stop(): void {
+	async stop(): Promise<void> {
 		if (this.reloadTimer !== null) {
 			clearTimeout(this.reloadTimer);
 			this.reloadTimer = null;
@@ -79,7 +84,12 @@ export class ScriptLoaderCore {
 			this.watchDisposable = null;
 		}
 
-		this.unregisterAllScripts();
+		await this.unregisterAllScripts();
+
+		// Dispose runtime if it has a dispose method
+		if (this.runtime.dispose) {
+			await this.runtime.dispose();
+		}
 	}
 
 	/**
@@ -90,7 +100,7 @@ export class ScriptLoaderCore {
 		if (nextPath === this.scriptsPath) {
 			return;
 		}
-		this.unregisterAllScripts();
+		await this.unregisterAllScripts();
 		this.scriptsPath = nextPath;
 		await this.ensureScriptsFolder();
 		await this.reloadAllScripts();
@@ -132,11 +142,9 @@ export class ScriptLoaderCore {
 	/**
 	 * Unregister all scripts
 	 */
-	private unregisterAllScripts(): void {
+	private async unregisterAllScripts(): Promise<void> {
 		const allPaths = this.scriptRegistry.getPaths();
-		for (const path of allPaths) {
-			this.unregisterScript(path);
-		}
+		await Promise.all(allPaths.map(path => this.unregisterScript(path)));
 		this.compiler.clear();
 	}
 
@@ -231,13 +239,19 @@ export class ScriptLoaderCore {
 		}
 
 		// Remove scripts that no longer exist
+		const removedScripts: string[] = [];
 		for (const path of this.scriptRegistry.getPaths()) {
 			if (!scriptSet.has(path)) {
-				const metadata = this.scriptRegistry.get(path);
-				this.unregisterScript(path);
-				this.logger.debug(`[ScriptLoaderCore] Removed script: ${metadata?.name}`);
+				removedScripts.push(path);
 			}
 		}
+
+		// Unregister removed scripts in parallel
+		await Promise.all(removedScripts.map(async path => {
+			const metadata = this.scriptRegistry.get(path);
+			await this.unregisterScript(path);
+			this.logger.debug(`[ScriptLoaderCore] Removed script: ${metadata?.name}`);
+		}));
 	}
 
 	/**
@@ -252,7 +266,9 @@ export class ScriptLoaderCore {
 		try {
 			const fileInfo = await this.scriptHost.readFile(scriptPath);
 			const compiled = await this.compiler.compile(scriptPath, fileInfo.contents, loader, fileInfo.mtime);
-			const exports = this.executor.execute(compiled, scriptPath, this.scriptContext);
+
+			// Load script using runtime
+			const handle = await this.runtime.load(compiled, scriptPath, this.scriptContext);
 
 			// Derive name from script path to ensure uniqueness
 			const name = this.deriveToolName(scriptPath);
@@ -262,12 +278,13 @@ export class ScriptLoaderCore {
 				name,
 				mtime: fileInfo.mtime,
 				compiledCode: compiled,
+				handle,
 			};
 
-			this.registerScript(metadata, exports);
+			this.registerScript(metadata, handle.exports);
 		} catch (error) {
 			this.logger.error(`[ScriptLoaderCore] Failed to load script ${scriptPath}:`, error);
-			this.unregisterScript(scriptPath);
+			await this.unregisterScript(scriptPath);
 			this.callbacks.onScriptError?.(scriptPath, error as Error);
 		}
 	}
@@ -283,11 +300,17 @@ export class ScriptLoaderCore {
 	/**
 	 * Unregister a script
 	 */
-	private unregisterScript(scriptPath: string): void {
+	private async unregisterScript(scriptPath: string): Promise<void> {
 		const metadata = this.scriptRegistry.get(scriptPath);
 		if (!metadata) {
 			return;
 		}
+
+		// Unload from runtime if handle exists
+		if (metadata.handle && this.runtime.unload) {
+			await this.runtime.unload(metadata.handle.id);
+		}
+
 		this.scriptRegistry.unregister(scriptPath);
 		this.compiler.invalidate(scriptPath);
 		this.callbacks.onScriptUnloaded?.(metadata);

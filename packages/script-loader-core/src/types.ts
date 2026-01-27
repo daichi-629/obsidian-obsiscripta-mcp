@@ -111,6 +111,8 @@ export interface ScriptMetadata {
 	mtime: number;
 	/** Compiled code */
 	compiledCode: string;
+	/** Handle to the loaded script for invocation (optional for backward compatibility) */
+	handle?: import("./runtime").ScriptHandle;
 }
 
 /**

@@ -27,6 +27,7 @@ export interface ScriptExecutorOptions {
  * Security Note: This class uses new Function() to execute user-provided scripts.
  * This is intentional and necessary for the dynamic script loading functionality.
  * Scripts should only be loaded from trusted sources.
+ * @deprecated Use ScriptRuntime implementations instead.
  */
 export class ScriptExecutor {
 	private contextConfig: ExecutionContextConfig;
