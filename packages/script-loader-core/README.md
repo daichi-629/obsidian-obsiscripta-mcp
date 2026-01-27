@@ -16,7 +16,7 @@ This package provides the core logic for loading, compiling, and executing scrip
 
 ## Core Interfaces
 
-The core depends on three key interfaces:
+The core depends on three key interfaces plus optional module resolution:
 
 ### ScriptHost
 Abstracts file system operations:
@@ -34,10 +34,23 @@ Abstracts path operations:
 Abstracts logging:
 - `debug/info/warn/error`: Log at different levels
 
+### ModuleResolver (optional)
+Resolves and loads script modules for `require()`:
+- `resolve(fromId, request)`: Map a module request to an id and code
+- `load(resolution)`: Return the module source code
+
 ## Usage
 
+Use `FunctionRuntime` for execution; `ScriptExecutor` is deprecated.
+
 ```typescript
-import { ScriptLoaderCore, ScriptRegistry, ScriptCompiler, ScriptExecutor } from "@obsiscripta/script-loader-core";
+import {
+  ScriptLoaderCore,
+  ScriptRegistry,
+  ScriptCompiler,
+  FunctionRuntime,
+  type ExecutionContextConfig
+} from "@obsiscripta/script-loader-core";
 
 // Implement the required interfaces for your platform
 const scriptHost: ScriptHost = {
@@ -62,7 +75,10 @@ const logger: Logger = {
 // Create the core loader
 const registry = new ScriptRegistry();
 const compiler = new ScriptCompiler();
-const executor = new ScriptExecutor(contextConfig);
+const contextConfig: ExecutionContextConfig = {
+  /* ... */
+};
+const runtime = new FunctionRuntime(contextConfig, { pathUtils });
 
 const loader = new ScriptLoaderCore(
   scriptHost,
@@ -70,9 +86,19 @@ const loader = new ScriptLoaderCore(
   logger,
   registry,
   compiler,
-  executor,
+  runtime,
   "scripts",
-  callbacks
+  {
+    isScriptPath: (path) => path.endsWith(".js"),
+    moduleResolver: {
+      async resolve(fromId, request) {
+        /* ... */
+      },
+      async load(resolution) {
+        /* ... */
+      }
+    }
+  }
 );
 
 await loader.start();
