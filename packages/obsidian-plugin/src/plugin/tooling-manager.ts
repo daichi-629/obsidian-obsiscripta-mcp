@@ -52,7 +52,7 @@ export class ToolingManager {
 		const scriptsPath = this.settings.scriptsPath ?? "";
 
 		// Create runtime with Obsidian context configuration
-		const runtime = ScriptLoader.createExecutor(createObsidianContextConfig(), this.vault);
+		const runtime = ScriptLoader.createRuntime(createObsidianContextConfig(), this.vault);
 		this.scriptRegistry = new ScriptRegistry(runtime);
 
 		// Create script loader with callbacks to bridge to tool registry
@@ -96,9 +96,9 @@ export class ToolingManager {
 		}
 	}
 
-	stop(): void {
+	async stop(): Promise<void> {
 		if (this.scriptLoader) {
-			this.scriptLoader.stop();
+			await this.scriptLoader.stop();
 		}
 		this.scriptLoader = null;
 		this.exampleManager = null;

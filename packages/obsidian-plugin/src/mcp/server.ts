@@ -4,12 +4,14 @@ import {
 	IncomingMessage,
 	ServerResponse,
 } from "http";
+import type { Socket } from "net";
 import { ToolExecutor } from "./tools/executor";
 import { ToolCallRequest } from "./bridge-types";
 
 export class BridgeServer {
 	private static readonly MAX_BODY_BYTES = 1024 * 1024;
 	private httpServer: HttpServer | null = null;
+	private sockets = new Set<Socket>();
 	private readonly executor: ToolExecutor;
 	private port: number;
 
@@ -232,12 +234,19 @@ export class BridgeServer {
 					console.error("[Bridge] Unhandled error:", error);
 				});
 			});
+			this.httpServer.on("connection", (socket) => {
+				this.sockets.add(socket);
+				socket.on("close", () => {
+					this.sockets.delete(socket);
+				});
+			});
 
 			this.httpServer.once("error", (error: unknown) => {
 				const err =
 					error instanceof Error ? error : new Error(String(error));
 				const server = this.httpServer;
 				this.httpServer = null;
+				this.sockets.clear();
 				if (server) {
 					server.close(() => {
 						console.debug(
@@ -279,13 +288,23 @@ export class BridgeServer {
 	async stop(): Promise<void> {
 		if (this.httpServer) {
 			return new Promise((resolve) => {
-				this.httpServer!.close(() => {
+				const server = this.httpServer;
+				if (!server) {
+					resolve();
+					return;
+				}
+				this.httpServer = null;
+				for (const socket of this.sockets) {
+					socket.destroy();
+				}
+				this.sockets.clear();
+				server.close(() => {
 					console.debug("[Bridge] Server stopped");
-					this.httpServer = null;
 					resolve();
 				});
 			});
 		}
+		return Promise.resolve();
 	}
 
 	/**
