@@ -251,10 +251,15 @@ describe("ScriptExecutor - Desired Behavior", () => {
 				module.exports = { hasRequire };
 			`;
 
-			const result = executor.execute(code, "/script.js", {});
+			const result = executor.execute(code, "/script.js", {}) as Record<string, unknown>;
 
 			// require availability depends on environment
 			expect(result).toHaveProperty("hasRequire");
+			// Verify that hasRequire is a boolean value (not undefined or null)
+			expect(typeof result.hasRequire).toBe("boolean");
+			// In Node.js environment, require should be available
+			// In browser/test environments, it may not be available
+			// The key contract is that the property accurately reflects availability
 		});
 	});
 
@@ -480,7 +485,6 @@ describe("ScriptExecutor - Desired Behavior", () => {
 			};
 			const executor = new ScriptExecutor(config, {
 				pathUtils,
-				basePath: "/base",
 			});
 
 			const code = `
@@ -492,15 +496,14 @@ describe("ScriptExecutor - Desired Behavior", () => {
 			expect(result).toEqual({ path: "/absolute/path/script.js" });
 		});
 
-		it("should handle relative script paths with basePath", () => {
-			// DESIRED: Relative paths resolved against basePath
+		it("should handle relative script paths", () => {
+			// DESIRED: Relative paths are preserved
 			const config: ExecutionContextConfig = {
 				variableNames: [],
 				provideContext: (scriptPath) => ({ scriptPath }),
 			};
 			const executor = new ScriptExecutor(config, {
 				pathUtils,
-				basePath: "/base",
 			});
 
 			const code = `

@@ -6,7 +6,7 @@ import {
 	ScriptExecutor,
 	ExecutionContextConfig,
 	ScriptLoaderCallbacks,
-	RequireOptions,
+	ScriptExecutorOptions,
 } from "@obsiscripta/script-loader-core";
 import { ScriptExecutionContext } from "./types";
 import { ObsidianVaultAdapter, EventRegistrar } from "./adapters/obsidian-vault-adapter";
@@ -115,15 +115,8 @@ export class ScriptLoader {
 		vault: Vault
 	): ScriptExecutor {
 		const pathUtils = new ObsidianPathUtils();
+		const options: ScriptExecutorOptions = { pathUtils };
 
-		// Get base path from vault adapter if available
-		const adapter = vault.adapter as { getBasePath?: () => string };
-		const basePath = adapter.getBasePath?.();
-
-		const requireOptions: RequireOptions | undefined = basePath
-			? { basePath, pathUtils }
-			: undefined;
-
-		return new ScriptExecutor(contextConfig, requireOptions);
+		return new ScriptExecutor(contextConfig, options);
 	}
 }

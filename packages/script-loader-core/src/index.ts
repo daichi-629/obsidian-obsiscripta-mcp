@@ -29,7 +29,7 @@ export { ScriptExecutor } from "./script-executor";
 /**
  * Configuration for script execution context
  */
-export type { ExecutionContextConfig, RequireOptions } from "./script-executor";
+export type { ExecutionContextConfig, ScriptExecutorOptions } from "./script-executor";
 
 /**
  * Abstract interfaces for platform adaptation

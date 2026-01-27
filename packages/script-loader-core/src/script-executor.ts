@@ -1,4 +1,3 @@
-import { createRequire } from "module";
 import { PathUtils, ScriptExecutionContext } from "./types";
 
 type RequireFn = (id: string) => unknown;
@@ -16,11 +15,9 @@ export interface ExecutionContextConfig {
 /**
  * Options for creating a local require function
  */
-export interface RequireOptions {
-	/** Base path for resolving absolute script paths */
-	basePath?: string;
+export interface ScriptExecutorOptions {
 	/** Path utilities for path operations */
-	pathUtils: PathUtils;
+	pathUtils?: PathUtils;
 }
 
 /**
@@ -33,11 +30,11 @@ export interface RequireOptions {
  */
 export class ScriptExecutor {
 	private contextConfig: ExecutionContextConfig;
-	private requireOptions?: RequireOptions;
+	private options?: ScriptExecutorOptions;
 
-	constructor(contextConfig: ExecutionContextConfig, requireOptions?: RequireOptions) {
+	constructor(contextConfig: ExecutionContextConfig, options?: ScriptExecutorOptions) {
 		this.contextConfig = contextConfig;
-		this.requireOptions = requireOptions;
+		this.options = options;
 	}
 
 	/**
@@ -46,7 +43,7 @@ export class ScriptExecutor {
 	 */
 	execute(code: string, scriptPath: string, context: ScriptExecutionContext): unknown {
 		const module = { exports: {} as Record<string, unknown> };
-		const localRequire = this.createLocalRequire(scriptPath);
+		const localRequire = this.getGlobalRequire();
 		const dirname = this.getDirname(scriptPath);
 
 		// Get context variables from configuration
@@ -75,44 +72,15 @@ export class ScriptExecutor {
 	 * Execute a function in the script context.
 	 * Useful for executing arbitrary functions with the configured context.
 	 */
-	executeFunction(
-		fn: (...args: unknown[]) => unknown,
+	executeFunction<This extends Record<string, unknown>, Args extends unknown[], Result>(
+		fn: (this: This, ...args: Args) => Result,
 		scriptPath: string,
 		context: ScriptExecutionContext,
-		...args: unknown[]
-	): unknown {
+		...args: Args
+	): Result {
 		const contextVars = this.contextConfig.provideContext(scriptPath, context);
 		// Bind context variables to the function
-		return fn.apply(contextVars, args);
-	}
-
-	/**
-	 * Create a local require function scoped to the script's directory
-	 */
-	private createLocalRequire(scriptPath: string): RequireFn | undefined {
-		const globalRequire = this.getGlobalRequire();
-		if (!globalRequire) {
-			return undefined;
-		}
-
-		if (!this.requireOptions) {
-			return globalRequire;
-		}
-
-		const { basePath, pathUtils } = this.requireOptions;
-		if (!basePath) {
-			return globalRequire;
-		}
-
-		const absoluteScriptPath = pathUtils.isAbsolute(scriptPath)
-			? scriptPath
-			: pathUtils.join(basePath, scriptPath);
-
-		try {
-			return createRequire(absoluteScriptPath) as unknown as RequireFn;
-		} catch {
-			return globalRequire;
-		}
+		return fn.apply(contextVars as This, args);
 	}
 
 	/**
@@ -130,8 +98,8 @@ export class ScriptExecutor {
 	 * Get the directory name from a script path
 	 */
 	private getDirname(scriptPath: string): string {
-		if (this.requireOptions?.pathUtils) {
-			return this.requireOptions.pathUtils.dirname(scriptPath);
+		if (this.options?.pathUtils) {
+			return this.options.pathUtils.dirname(scriptPath);
 		}
 		// Fallback implementation
 		const normalized = scriptPath.replace(/\\/g, "/");

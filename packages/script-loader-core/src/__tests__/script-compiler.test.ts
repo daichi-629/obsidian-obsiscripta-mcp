@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { ScriptCompiler } from "../script-compiler";
+import { ScriptExecutor } from "../script-executor";
+import type { PathUtils } from "../types";
 
 /**
  * ScriptCompiler Tests
@@ -259,8 +261,44 @@ describe("ScriptCompiler - Desired Behavior", () => {
 
 			const compiled = await compiler.compile("/exports.ts", source, "ts");
 
+			// Verify the compiled code contains export syntax
 			expect(compiled).toContain("export");
 			expect(compiled).toContain("named");
+
+			// Verify exports are actually accessible when executed
+			const pathUtils: PathUtils = {
+				join: (...parts: string[]) => parts.join("/"),
+				dirname: (p: string) => p.split("/").slice(0, -1).join("/"),
+				normalize: (p: string) => p,
+				isAbsolute: (p: string) => p.startsWith("/"),
+				relative: (from: string, to: string) =>
+					to.startsWith(from) ? to.slice(from.length).replace(/^\/+/, "") : to,
+			};
+			const executor = new ScriptExecutor(
+				{
+					variableNames: [],
+					provideContext: () => ({}),
+				},
+				{ pathUtils }
+			);
+
+			const result = executor.execute(compiled, "/exports.js", {}) as Record<
+				string,
+				unknown
+			>;
+
+			// Verify that exports are actually accessible
+			expect(result).toBeDefined();
+			// The compiled code may transform exports to CommonJS format
+			// Check that at least one form of export is accessible
+			const hasNamedExport = result.named === "value";
+			const hasDefaultExport =
+				result.default &&
+				typeof result.default === "object" &&
+				(result.default as { named?: string }).named === "value";
+
+			// At least one export mechanism should work
+			expect(hasNamedExport || hasDefaultExport).toBe(true);
 		});
 
 		it("should handle empty source files", async () => {

@@ -215,7 +215,12 @@ describe("ScriptLoaderCore - Desired Behavior", () => {
 			// Should have reloaded once (debounced)
 			const finalCalls = (callbacks.onScriptLoaded as ReturnType<typeof vi.fn>).mock.calls
 				.length;
+			// Verify that reload actually happened (at least once)
+			expect(finalCalls).toBeGreaterThan(initialCalls);
+			// Verify that debouncing worked (not 3 separate reloads)
 			expect(finalCalls).toBeLessThan(initialCalls + 3);
+			// Ideally should be exactly one reload
+			expect(finalCalls).toBe(initialCalls + 1);
 		});
 	});
 

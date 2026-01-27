@@ -39,7 +39,7 @@ export type { ScriptExecutionContext } from "./types";
  */
 export type {
 	ExecutionContextConfig,
-	RequireOptions,
+	ScriptExecutorOptions,
 	ScriptMetadata,
 	ScriptLoaderCallbacks,
 	ScriptLoaderType,
