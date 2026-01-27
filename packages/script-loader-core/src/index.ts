@@ -61,6 +61,7 @@ export type {
 	FileInfo,
 	Disposable,
 	WatchHandlers,
+	ModuleResolver,
 } from "./types";
 
 /**

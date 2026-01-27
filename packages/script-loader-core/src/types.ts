@@ -89,6 +89,16 @@ export interface PathUtils {
 }
 
 /**
+ * Abstract interface for module resolution and loading.
+ * Implementations define platform-specific rules and access.
+ */
+export interface ModuleResolver {
+	resolve(specifier: string, fromPath: string): Promise<string | null>;
+	load(resolvedPath: string): Promise<{ code: string; mtime?: number }>;
+	clearCache?(): void;
+}
+
+/**
  * Abstract interface for logging.
  * Platform-specific implementations handle log output.
  */
@@ -125,6 +135,8 @@ export interface ScriptLoaderCallbacks {
 	onScriptUnloaded?: (metadata: ScriptMetadata) => void;
 	/** Called when a script fails to load or compile */
 	onScriptError?: (path: string, error: Error) => void;
+	/** Optional filter to decide whether a script should register */
+	isScriptPath?: (path: string) => boolean;
 }
 
 /**

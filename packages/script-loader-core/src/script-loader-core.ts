@@ -262,6 +262,9 @@ export class ScriptLoaderCore {
 		if (!loader) {
 			return;
 		}
+		if (this.callbacks.isScriptPath && !this.callbacks.isScriptPath(scriptPath)) {
+			return;
+		}
 
 		try {
 			const fileInfo = await this.scriptHost.readFile(scriptPath);

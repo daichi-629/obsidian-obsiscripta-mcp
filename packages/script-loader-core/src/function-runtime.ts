@@ -1,4 +1,4 @@
-import { PathUtils, ScriptExecutionContext } from "./types";
+import { ModuleResolver, PathUtils, ScriptExecutionContext } from "./types";
 import { ScriptRuntime, ScriptHandle } from "./runtime";
 
 type RequireFn = (id: string) => unknown;
@@ -19,6 +19,8 @@ export interface ExecutionContextConfig {
 export interface FunctionRuntimeOptions {
 	/** Path utilities for path operations */
 	pathUtils?: PathUtils;
+	/** Optional module resolver for shared modules */
+	moduleResolver?: ModuleResolver;
 }
 
 /**
@@ -33,6 +35,9 @@ export class FunctionRuntime implements ScriptRuntime {
 	private contextConfig: ExecutionContextConfig;
 	private options?: FunctionRuntimeOptions;
 	private handles: Map<string, ScriptHandle> = new Map();
+	private moduleCache: Map<string, unknown> = new Map();
+	private moduleResolutionCache: Map<string, string> = new Map();
+	private moduleLoaders: Map<string, Promise<void>> = new Map();
 
 	constructor(contextConfig: ExecutionContextConfig, options?: FunctionRuntimeOptions) {
 		this.contextConfig = contextConfig;
@@ -51,18 +56,29 @@ export class FunctionRuntime implements ScriptRuntime {
 	 */
 	async load(code: string, scriptPath: string, context: ScriptExecutionContext): Promise<ScriptHandle> {
 		const module = { exports: {} as Record<string, unknown> };
-		const localRequire = this.getGlobalRequire();
+		if (this.options?.moduleResolver) {
+			await this.preloadRequires(code, scriptPath, context);
+		}
+		const localRequire = this.getLocalRequire(scriptPath);
 		const dirname = this.getDirname(scriptPath);
 
 		// Get context variables from configuration
 		const contextVars = this.contextConfig.provideContext(scriptPath, context);
 
 		// Build function parameters
-		const baseParams = ["module", "exports", "require", "__filename", "__dirname"];
+		const baseParams = ["module", "exports"];
+		if (localRequire) {
+			baseParams.push("require");
+		}
+		baseParams.push("__filename", "__dirname");
 		const allParams = [...baseParams, ...this.contextConfig.variableNames];
 
 		// Build function arguments
-		const baseArgs = [module, module.exports, localRequire, scriptPath, dirname];
+		const baseArgs: unknown[] = [module, module.exports];
+		if (localRequire) {
+			baseArgs.push(localRequire);
+		}
+		baseArgs.push(scriptPath, dirname);
 		const contextArgs = this.contextConfig.variableNames.map(name => contextVars[name]);
 		const allArgs = [...baseArgs, ...contextArgs];
 
@@ -125,6 +141,9 @@ export class FunctionRuntime implements ScriptRuntime {
 	 */
 	async dispose(): Promise<void> {
 		this.handles.clear();
+		this.moduleCache.clear();
+		this.moduleResolutionCache.clear();
+		this.moduleLoaders.clear();
 	}
 
 	/**
@@ -151,14 +170,117 @@ export class FunctionRuntime implements ScriptRuntime {
 	}
 
 	/**
-	 * Get the global require function if available
+	 * Create a resolver-backed require function when a ModuleResolver is provided.
 	 */
-	private getGlobalRequire(): RequireFn | undefined {
-		const globalRequire = (globalThis as { require?: unknown }).require;
-		if (typeof globalRequire === "function") {
-			return globalRequire as RequireFn;
+	private getLocalRequire(scriptPath: string): RequireFn | undefined {
+		if (!this.options?.moduleResolver) {
+			return undefined;
 		}
-		return undefined;
+		return (specifier: string) => this.requireFromCache(specifier, scriptPath);
+	}
+
+	private requireFromCache(specifier: string, fromPath: string): unknown {
+		const resolvedPath = this.getResolvedPath(specifier, fromPath);
+		const cached = this.moduleCache.get(resolvedPath);
+		if (cached === undefined) {
+			throw new Error(`Module '${specifier}' from '${fromPath}' was not preloaded`);
+		}
+		return cached;
+	}
+
+	private getResolvedPath(specifier: string, fromPath: string): string {
+		const cacheKey = this.getResolutionKey(fromPath, specifier);
+		const resolved = this.moduleResolutionCache.get(cacheKey);
+		if (!resolved) {
+			throw new Error(`Cannot resolve module '${specifier}' from '${fromPath}'`);
+		}
+		return resolved;
+	}
+
+	private getResolutionKey(fromPath: string, specifier: string): string {
+		return `${fromPath}::${specifier}`;
+	}
+
+	private async preloadRequires(
+		code: string,
+		fromPath: string,
+		context: ScriptExecutionContext
+	): Promise<void> {
+		const resolver = this.options?.moduleResolver;
+		if (!resolver) {
+			return;
+		}
+
+		const specifiers = this.extractRequireSpecifiers(code);
+		for (const specifier of specifiers) {
+			const cacheKey = this.getResolutionKey(fromPath, specifier);
+			if (!this.moduleResolutionCache.has(cacheKey)) {
+				const resolvedPath = await resolver.resolve(specifier, fromPath);
+				if (!resolvedPath) {
+					throw new Error(`Cannot resolve module '${specifier}' from '${fromPath}'`);
+				}
+				this.moduleResolutionCache.set(cacheKey, resolvedPath);
+				await this.loadModule(resolvedPath, context);
+			}
+		}
+	}
+
+	private async loadModule(resolvedPath: string, context: ScriptExecutionContext): Promise<void> {
+		if (this.moduleCache.has(resolvedPath)) {
+			return;
+		}
+		const existing = this.moduleLoaders.get(resolvedPath);
+		if (existing) {
+			await existing;
+			return;
+		}
+
+		const loader = this.executeModule(resolvedPath, context);
+		this.moduleLoaders.set(resolvedPath, loader);
+		try {
+			await loader;
+		} finally {
+			this.moduleLoaders.delete(resolvedPath);
+		}
+	}
+
+	private async executeModule(resolvedPath: string, context: ScriptExecutionContext): Promise<void> {
+		const resolver = this.options?.moduleResolver;
+		if (!resolver) {
+			throw new Error("Module resolver is not configured");
+		}
+
+		const moduleInfo = await resolver.load(resolvedPath);
+		const module = { exports: {} as Record<string, unknown> };
+		this.moduleCache.set(resolvedPath, module.exports);
+
+		await this.preloadRequires(moduleInfo.code, resolvedPath, context);
+
+		const dirname = this.getDirname(resolvedPath);
+		const localRequire = (specifier: string) => this.requireFromCache(specifier, resolvedPath);
+
+		const contextVars = this.contextConfig.provideContext(resolvedPath, context);
+		const baseParams = ["module", "exports", "require", "__filename", "__dirname"];
+		const allParams = [...baseParams, ...this.contextConfig.variableNames];
+		const baseArgs: unknown[] = [module, module.exports, localRequire, resolvedPath, dirname];
+		const contextArgs = this.contextConfig.variableNames.map(name => contextVars[name]);
+		const allArgs = [...baseArgs, ...contextArgs];
+
+		const runner = new Function(...allParams, moduleInfo.code);
+		runner(...allArgs);
+
+		this.moduleCache.set(resolvedPath, module.exports);
+	}
+
+	private extractRequireSpecifiers(code: string): string[] {
+		const matches = code.matchAll(/\brequire\s*\(\s*["']([^"']+)["']\s*\)/g);
+		const specifiers: string[] = [];
+		for (const match of matches) {
+			if (match[1]) {
+				specifiers.push(match[1]);
+			}
+		}
+		return specifiers;
 	}
 
 	/**

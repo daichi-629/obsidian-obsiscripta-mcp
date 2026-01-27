@@ -122,6 +122,23 @@ describe("ScriptLoaderCore - Desired Behavior", () => {
 			expect(registry.get("mcp-tools/tool.ts")).toBeDefined();
 		});
 
+		it("should honor isScriptPath when provided", async () => {
+			// DESIRED: Non-tool scripts are excluded from registration
+			scriptHost.setFile("mcp-tools/tool.ts", "export default {};", 1000);
+			scriptHost.setFile("mcp-tools/_shared/utils.ts", "export default {};", 2000);
+
+			callbacks.isScriptPath = vi.fn((path) => !path.includes("/_shared/"));
+
+			loader = createLoader();
+			await loader.start();
+
+			expect(callbacks.isScriptPath).toHaveBeenCalledWith("mcp-tools/tool.ts");
+			expect(callbacks.isScriptPath).toHaveBeenCalledWith("mcp-tools/_shared/utils.ts");
+			expect(registry.count()).toBe(1);
+			expect(registry.get("mcp-tools/tool.ts")).toBeDefined();
+			expect(registry.get("mcp-tools/_shared/utils.ts")).toBeUndefined();
+		});
+
 		it("should derive unique tool names from file paths", async () => {
 			// DESIRED: Nested paths create namespaced tool names
 			scriptHost.setFile("mcp-tools/auth/login.ts", "export default {};", 1000);
