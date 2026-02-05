@@ -134,6 +134,13 @@ export class ObsidianVaultAdapter implements ScriptHost {
 			await this.vault.createFolder(normalizedPath);
 		} catch (error) {
 			// Obsidian can throw "Folder already exists." for existing paths (e.g. trailing slash or race).
+			// If the error message indicates the folder already exists, treat it as success
+			// even if the cache hasn't updated yet
+			if (error instanceof Error && error.message === "Folder already exists.") {
+				return;
+			}
+			// For other errors, wait briefly for cache to update, then retry
+			await new Promise(resolve => setTimeout(resolve, 100));
 			const retry = this.vault.getAbstractFileByPath(normalizedPath);
 			if (retry instanceof TFolder) {
 				return;

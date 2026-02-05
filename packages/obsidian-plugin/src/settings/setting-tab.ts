@@ -154,6 +154,7 @@ export class MCPSettingTab extends PluginSettingTab {
 			.addButton((button) =>
 				button.setButtonText("Reload").onClick(async () => {
 					await this.settingsStore.reloadScripts();
+					this.display();
 				}),
 			);
 
