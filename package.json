@@ -1,6 +1,6 @@
 {
 	"name": "obsiscripta-bridge-monorepo",
-	"version": "0.1.2",
+	"version": "0.1.3",
 	"private": true,
 	"description": "Monorepo for ObsiScripta Bridge - Obsidian plugin and stdio MCP bridge",
 	"packageManager": "pnpm@10.28.1",

@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-mcp-bridge",
-	"version": "0.1.2",
+	"version": "0.1.3",
 	"description": "stdio MCP Bridge for Obsidian plugin",
 	"type": "module",
 	"main": "dist/obsidian-mcp.cjs",
