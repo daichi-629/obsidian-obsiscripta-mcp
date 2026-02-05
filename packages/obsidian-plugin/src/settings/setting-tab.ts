@@ -8,6 +8,7 @@ const TIMER_DELAY = 2000;
 export class MCPSettingTab extends PluginSettingTab {
 	private settingsStore: SettingsStore;
 	private exampleManager: ExampleManager | null;
+	private displayTimer: number | null = null;
 
 	constructor(
 		app: App,
@@ -18,6 +19,19 @@ export class MCPSettingTab extends PluginSettingTab {
 		super(app, plugin);
 		this.settingsStore = settingsStore;
 		this.exampleManager = exampleManager;
+	}
+
+	/**
+	 * Schedules a delayed UI redraw to avoid excessive re-rendering during rapid input
+	 */
+	private scheduleDisplay(): void {
+		if (this.displayTimer !== null) {
+			clearTimeout(this.displayTimer);
+		}
+		this.displayTimer = window.setTimeout(() => {
+			this.display();
+			this.displayTimer = null;
+		}, TIMER_DELAY);
 	}
 
 	display(): void {
@@ -89,11 +103,10 @@ export class MCPSettingTab extends PluginSettingTab {
 					.setValue(settings.bindHost)
 					.onChange(async (value) => {
 						await this.settingsStore.updateBindHost(value);
-						this.display();
+						this.scheduleDisplay();
 					}),
 			);
 
-		let portTimer: number | null = null;
 		new Setting(containerEl)
 			.setName("Port")
 			.setDesc("The port number for the server (requires restart)")
@@ -101,19 +114,12 @@ export class MCPSettingTab extends PluginSettingTab {
 				text
 					.setPlaceholder("3000")
 					.setValue(String(settings.port))
-					.onChange((value) => {
-						if (portTimer !== null) {
-							clearTimeout(portTimer);
+					.onChange(async (value) => {
+						const port = parseInt(value, 10);
+						if (!isNaN(port) && port > 0 && port < 65536) {
+							await this.settingsStore.updatePort(port);
+							this.scheduleDisplay();
 						}
-						portTimer = window.setTimeout(() => {
-							const port = parseInt(value, 10);
-							if (!isNaN(port) && port > 0 && port < 65536) {
-								void this.settingsStore.updatePort(port).then(() => {
-									this.display();
-								});
-							}
-							portTimer = null;
-						}, TIMER_DELAY);
 					}),
 			);
 
@@ -145,7 +151,6 @@ export class MCPSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl).setName("Script tools").setHeading();
 
-		let scriptsPathTimer: number | null = null;
 		new Setting(containerEl)
 			.setName("Script folder")
 			.setDesc(
@@ -155,14 +160,9 @@ export class MCPSettingTab extends PluginSettingTab {
 				text
 					.setPlaceholder("Script tools (mcp-tools)")
 					.setValue(settings.scriptsPath)
-					.onChange((value) => {
-						if (scriptsPathTimer !== null) {
-							clearTimeout(scriptsPathTimer);
-						}
-						scriptsPathTimer = window.setTimeout(() => {
-							void this.settingsStore.updateScriptsPath(value);
-							scriptsPathTimer = null;
-						}, TIMER_DELAY);
+					.onChange(async (value) => {
+						await this.settingsStore.updateScriptsPath(value);
+						this.scheduleDisplay();
 					}),
 			);
 
