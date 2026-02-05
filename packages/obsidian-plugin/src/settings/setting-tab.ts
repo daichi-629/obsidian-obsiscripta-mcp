@@ -2,7 +2,6 @@ import { App, PluginSettingTab, Plugin, Setting } from "obsidian";
 import { SettingsStore } from "./settings-store";
 import { ToolSource } from "../mcp/tools/registry";
 import { ExampleManager } from "../mcp/tools/scripting/example-manager";
-import { MCPToolDefinition } from "../mcp/tools/types";
 
 const TIMER_DELAY = 2000;
 
@@ -106,11 +105,12 @@ export class MCPSettingTab extends PluginSettingTab {
 						if (portTimer !== null) {
 							clearTimeout(portTimer);
 						}
-						portTimer = window.setTimeout(async () => {
+						portTimer = window.setTimeout(() => {
 							const port = parseInt(value, 10);
 							if (!isNaN(port) && port > 0 && port < 65536) {
-								await this.settingsStore.updatePort(port);
-								this.display();
+								void this.settingsStore.updatePort(port).then(() => {
+									this.display();
+								});
 							}
 							portTimer = null;
 						}, TIMER_DELAY);
