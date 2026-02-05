@@ -1,7 +1,6 @@
 import { Notice, Plugin } from "obsidian";
 import { MCPPluginSettings, DEFAULT_SETTINGS } from "./types";
 import { ScriptLoader } from "@obsiscripta/obsidian-script-loader";
-import { SettingTabServices } from "./setting-tab";
 import { ToolingManager } from "../plugin/tooling-manager";
 import { BridgeController } from "../plugin/bridge-controller";
 import { MCPToolDefinition } from "../mcp/tools/types";
@@ -13,7 +12,7 @@ import { ToolSource } from "../mcp/tools/registry";
  * It also acts as a facade for the settings UI, delegating to ToolingManager
  * and BridgeController as needed.
  */
-export class SettingsStore implements SettingTabServices {
+export class SettingsStore {
 	private settings: MCPPluginSettings;
 	private plugin: Plugin;
 	private toolingManager?: ToolingManager;
@@ -93,6 +92,12 @@ export class SettingsStore implements SettingTabServices {
 		this.settings.port = value;
 		await this.save();
 		this.bridgeController?.updateSettings({ port: value });
+	}
+
+	async updateBindHost(value: string): Promise<void> {
+		this.settings.bindHost = value;
+		await this.save();
+		this.bridgeController?.updateSettings({ bindHost: value });
 	}
 
 	/**
@@ -206,5 +211,17 @@ export class SettingsStore implements SettingTabServices {
 			throw new Error("BridgeController not initialized");
 		}
 		await this.bridgeController.stop();
+	}
+
+	needsRestart(): boolean {
+		return this.bridgeController?.needsRestart() ?? false;
+	}
+
+	getRunningServerPort(): number | null {
+		return this.bridgeController?.getRunningSettings()?.port ?? null;
+	}
+
+	getRunningServerBindHost(): string | null {
+		return this.bridgeController?.getRunningSettings()?.bindHost ?? null;
 	}
 }

@@ -8,6 +8,7 @@ import { AppContext } from "./context";
 interface BridgeSettings {
 	autoStart: boolean;
 	port: number;
+	bindHost: string;
 }
 
 // Owns the bridge server lifecycle and user-facing notices.
@@ -17,6 +18,7 @@ export class BridgeController {
 	private settings: BridgeSettings;
 	private toolRegistry: ToolRegistry;
 	private server: BridgeServer | null = null;
+	private runningSettings: BridgeSettings | null = null;
 
 	constructor(
 		app: App,
@@ -32,6 +34,20 @@ export class BridgeController {
 
 	isRunning(): boolean {
 		return this.server?.isRunning() ?? false;
+	}
+
+	needsRestart(): boolean {
+		if (!this.isRunning() || !this.runningSettings) {
+			return false;
+		}
+		return (
+			this.runningSettings.port !== this.settings.port ||
+			this.runningSettings.bindHost !== this.settings.bindHost
+		);
+	}
+
+	getRunningSettings(): Readonly<BridgeSettings> | null {
+		return this.runningSettings ? { ...this.runningSettings } : null;
 	}
 
 	updateSettings(next: Partial<BridgeSettings>): void {
@@ -54,9 +70,11 @@ export class BridgeController {
 		this.server = new BridgeServer(
 			executor,
 			this.settings.port,
+			this.settings.bindHost,
 		);
 		try {
 			await this.server.start();
+			this.runningSettings = { ...this.settings };
 			new Notice(message);
 		} catch (error) {
 			console.error("[Bridge] Failed to start server:", error);
@@ -76,6 +94,7 @@ export class BridgeController {
 		if (this.server) {
 			await this.server.stop();
 			this.server = null;
+			this.runningSettings = null;
 		}
 	}
 

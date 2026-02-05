@@ -26,8 +26,10 @@
 		"typescript-eslint": "^8.54.0"
 	},
 	"dependencies": {
+		"@hono/node-server": "^1.19.9",
 		"@obsiscripta/obsidian-script-loader": "workspace:*",
 		"@obsiscripta/shared": "workspace:*",
+		"hono": "^4.11.7",
 		"obsidian": "latest",
 		"sucrase": "^3.35.1"
 	}
