@@ -14,13 +14,16 @@ export class BridgeServer {
 	private sockets = new Set<Socket>();
 	private readonly executor: ToolExecutor;
 	private port: number;
+	private host: string;
 
 	constructor(
 		executor: ToolExecutor,
 		port: number = 3000,
+		host: string = "127.0.0.1",
 	) {
 		this.executor = executor;
 		this.port = port;
+		this.host = host;
 	}
 
 	/**
@@ -269,9 +272,9 @@ export class BridgeServer {
 				reject(err);
 			});
 
-			this.httpServer.listen(this.port, "127.0.0.1", () => {
+			this.httpServer.listen(this.port, this.host, () => {
 				console.debug(
-					`[Bridge] Server started on http://127.0.0.1:${this.port}/bridge/v1`,
+					`[Bridge] Server started on http://${this.host}:${this.port}/bridge/v1`,
 				);
 				if (settled) {
 					return;

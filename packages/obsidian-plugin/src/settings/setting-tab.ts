@@ -4,22 +4,7 @@ import { ToolSource } from "../mcp/tools/registry";
 import { ExampleManager } from "../mcp/tools/scripting/example-manager";
 import { MCPToolDefinition } from "../mcp/tools/types";
 
-/**
- * Interface for plugin services needed by the settings tab.
- * This decouples the settings UI from the main plugin class.
- */
-export interface SettingTabServices {
-	updateScriptsPath(scriptsPath: string): Promise<void>;
-	reloadScripts(): Promise<void>;
-	getRegisteredTools(): MCPToolDefinition[];
-	isToolEnabled(name: string): boolean;
-	getToolSource(name: string): ToolSource;
-	setToolEnabled(name: string, enabled: boolean): Promise<void>;
-	restartServer(): Promise<void>;
-	isServerRunning(): boolean;
-	startServer(): Promise<void>;
-	stopServer(): Promise<void>;
-}
+const TIMER_DELAY = 2000;
 
 export class MCPSettingTab extends PluginSettingTab {
 	private settingsStore: SettingsStore;
@@ -43,6 +28,8 @@ export class MCPSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl).setName("Server").setHeading();
 
+		const settings = this.settingsStore.getSettings();
+
 		// Warning notice
 		const warningEl = containerEl.createEl("div", {
 			cls: "mod-warning mcp-settings-warning",
@@ -51,12 +38,13 @@ export class MCPSettingTab extends PluginSettingTab {
 			text: "Warning: desktop only. This plugin does not work on mobile.",
 			cls: "mcp-settings-warning-title",
 		});
+		const bindWarningText = settings.bindHost === "0.0.0.0"
+			? "Warning: the server binds to all network interfaces (0.0.0.0). It is accessible from other devices on your network. No authentication is required."
+			: "Warning: the server binds to localhost only (127.0.0.1). No authentication is required.";
 		warningEl.createEl("p", {
-			text: "Warning: the server binds to localhost only (127.0.0.1). No authentication is required.",
+			text: bindWarningText,
 			cls: "mcp-settings-warning-body",
 		});
-
-		const settings = this.settingsStore.getSettings();
 
 		// Server status indicator
 		const statusSetting = new Setting(containerEl)
@@ -65,11 +53,19 @@ export class MCPSettingTab extends PluginSettingTab {
 
 		const updateServerStatus = () => {
 			const isRunning = this.settingsStore.isServerRunning();
-			statusSetting.setDesc(
-				isRunning
-					? `🟢 Running on port ${settings.port}`
-					: "🔴 Stopped",
-			);
+			const needsRestart = this.settingsStore.needsRestart();
+			const runningPort = this.settingsStore.getRunningServerPort();
+			const runningBindHost = this.settingsStore.getRunningServerBindHost();
+
+			let statusText = isRunning
+				? `🟢 Running on ${runningBindHost ?? settings.bindHost}:${runningPort ?? settings.port}`
+				: "🔴 Stopped";
+
+			if (needsRestart) {
+				statusText += " ⚠️ Settings changed - restart required";
+			}
+
+			statusSetting.setDesc(statusText);
 		};
 		updateServerStatus();
 
@@ -85,17 +81,39 @@ export class MCPSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
+			.setName("Bind address")
+			.setDesc("The network address to bind to (requires restart)")
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption("127.0.0.1", "127.0.0.1 (localhost only)")
+					.addOption("0.0.0.0", "0.0.0.0 (all interfaces)")
+					.setValue(settings.bindHost)
+					.onChange(async (value) => {
+						await this.settingsStore.updateBindHost(value);
+						this.display();
+					}),
+			);
+
+		let portTimer: number | null = null;
+		new Setting(containerEl)
 			.setName("Port")
 			.setDesc("The port number for the server (requires restart)")
 			.addText((text) =>
 				text
 					.setPlaceholder("3000")
 					.setValue(String(settings.port))
-					.onChange(async (value) => {
-						const port = parseInt(value, 10);
-						if (!isNaN(port) && port > 0 && port < 65536) {
-							await this.settingsStore.updatePort(port);
+					.onChange((value) => {
+						if (portTimer !== null) {
+							clearTimeout(portTimer);
 						}
+						portTimer = window.setTimeout(async () => {
+							const port = parseInt(value, 10);
+							if (!isNaN(port) && port > 0 && port < 65536) {
+								await this.settingsStore.updatePort(port);
+								this.display();
+							}
+							portTimer = null;
+						}, TIMER_DELAY);
 					}),
 			);
 
@@ -144,7 +162,7 @@ export class MCPSettingTab extends PluginSettingTab {
 						scriptsPathTimer = window.setTimeout(() => {
 							void this.settingsStore.updateScriptsPath(value);
 							scriptsPathTimer = null;
-						}, 400);
+						}, TIMER_DELAY);
 					}),
 			);
 
