@@ -12,16 +12,19 @@ export class BridgeServer {
 	private readonly executor: ToolExecutor;
 	private port: number;
 	private host: string;
+	private apiToken: string;
 	private app: Hono;
 
 	constructor(
 		executor: ToolExecutor,
 		port: number = 3000,
 		host: string = "127.0.0.1",
+		apiToken: string = "",
 	) {
 		this.executor = executor;
 		this.port = port;
 		this.host = host;
+		this.apiToken = apiToken;
 		this.app = this.createApp();
 	}
 
@@ -37,9 +40,38 @@ export class BridgeServer {
 			cors({
 				origin: "*",
 				allowMethods: ["GET", "POST", "OPTIONS"],
-				allowHeaders: ["Content-Type"],
+				allowHeaders: ["Content-Type", "Authorization"],
 			}),
 		);
+
+		// Bearer token authentication middleware
+		// When apiToken is set, all Bridge API requests require a valid Bearer token.
+		// When apiToken is empty, no authentication is required (local stdio-bridge use).
+		if (this.apiToken) {
+			app.use("/bridge/v1/*", async (c, next) => {
+				const authHeader = c.req.header("authorization");
+				if (!authHeader || !authHeader.startsWith("Bearer ")) {
+					return c.json(
+						{
+							error: "Unauthorized",
+							message: "Bearer token required",
+						},
+						401,
+					);
+				}
+				const token = authHeader.slice("Bearer ".length);
+				if (token !== this.apiToken) {
+					return c.json(
+						{
+							error: "Forbidden",
+							message: "Invalid bearer token",
+						},
+						403,
+					);
+				}
+				return await next();
+			});
+		}
 
 		// Body size limit middleware
 		app.use("/bridge/v1/*", async (c, next) => {

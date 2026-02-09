@@ -100,6 +100,12 @@ export class SettingsStore {
 		this.bridgeController?.updateSettings({ bindHost: value });
 	}
 
+	async updateApiToken(value: string): Promise<void> {
+		this.settings.apiToken = value;
+		await this.save();
+		this.bridgeController?.updateSettings({ apiToken: value });
+	}
+
 	/**
 	 * Add a tool to the disabled list.
 	 */

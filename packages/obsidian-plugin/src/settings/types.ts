@@ -4,6 +4,8 @@ export interface MCPPluginSettings {
 	autoStart: boolean;
 	scriptsPath: string;
 	disabledTools: string[];
+	/** Bearer token for authenticating remote MCP server requests. Empty = no auth required. */
+	apiToken: string;
 }
 
 export const DEFAULT_SETTINGS: MCPPluginSettings = {
@@ -12,4 +14,5 @@ export const DEFAULT_SETTINGS: MCPPluginSettings = {
 	autoStart: true,
 	scriptsPath: "mcp-tools",
 	disabledTools: [],
+	apiToken: "",
 };

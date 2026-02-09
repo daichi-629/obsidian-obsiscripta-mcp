@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Plugin, Setting } from "obsidian";
+import { App, PluginSettingTab, Plugin, Setting, Notice } from "obsidian";
 import { SettingsStore } from "./settings-store";
 import { ToolSource } from "../mcp/tools/registry";
 import { ExampleManager } from "../mcp/tools/scripting/example-manager";
@@ -121,6 +121,44 @@ export class MCPSettingTab extends PluginSettingTab {
 							this.scheduleDisplay();
 						}
 					}),
+			);
+
+		new Setting(containerEl)
+			.setName("API token")
+			.setDesc(
+				"Bearer token for remote MCP server authentication. " +
+				"When set, all Bridge API requests require this token. " +
+				"Leave empty for local-only access without authentication (requires restart).",
+			)
+			.addText((text) => {
+				text.inputEl.type = "password";
+				text.inputEl.style.fontFamily = "monospace";
+				return text
+					.setPlaceholder("No token (open access)")
+					.setValue(settings.apiToken)
+					.onChange(async (value) => {
+						await this.settingsStore.updateApiToken(value);
+						this.scheduleDisplay();
+					});
+			})
+			.addButton((button) =>
+				button.setButtonText("Generate").onClick(async () => {
+					const token = generateSecureToken();
+					await this.settingsStore.updateApiToken(token);
+					this.display();
+					new Notice("API token generated. Restart required.");
+				}),
+			)
+			.addButton((button) =>
+				button.setButtonText("Copy").onClick(() => {
+					const currentToken = this.settingsStore.getSettings().apiToken;
+					if (currentToken) {
+						navigator.clipboard.writeText(currentToken);
+						new Notice("API token copied to clipboard");
+					} else {
+						new Notice("No API token set");
+					}
+				}),
 			);
 
 		new Setting(containerEl)
@@ -258,4 +296,15 @@ export class MCPSettingTab extends PluginSettingTab {
 			}
 		}
 	}
+}
+
+/**
+ * Generate a cryptographically secure random token (URL-safe base64, 32 bytes).
+ */
+function generateSecureToken(): string {
+	const bytes = new Uint8Array(32);
+	crypto.getRandomValues(bytes);
+	// URL-safe base64 encoding
+	const base64 = btoa(String.fromCharCode(...bytes));
+	return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }

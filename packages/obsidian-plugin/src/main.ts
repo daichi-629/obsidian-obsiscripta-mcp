@@ -45,6 +45,7 @@ export default class MCPPlugin extends Plugin {
 				autoStart: this.settings.autoStart,
 				port: this.settings.port,
 				bindHost: this.settings.bindHost,
+				apiToken: this.settings.apiToken,
 			},
 			this.toolingManager.registry,
 		);
