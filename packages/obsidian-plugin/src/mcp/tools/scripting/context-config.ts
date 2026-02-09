@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { ExecutionContextConfig, ScriptExecutionContext } from "@obsiscripta/obsidian-script-loader";
 import { getPlugin } from "../../utils/plugin-access";
 
