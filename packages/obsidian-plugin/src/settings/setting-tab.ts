@@ -132,7 +132,7 @@ export class MCPSettingTab extends PluginSettingTab {
 			)
 			.addText((text) => {
 				text.inputEl.type = "password";
-				text.inputEl.style.fontFamily = "monospace";
+				text.inputEl.addClass("monospace-input");
 				return text
 					.setPlaceholder("No token (open access)")
 					.setValue(settings.apiToken)
@@ -153,7 +153,7 @@ export class MCPSettingTab extends PluginSettingTab {
 				button.setButtonText("Copy").onClick(() => {
 					const currentToken = this.settingsStore.getSettings().apiToken;
 					if (currentToken) {
-						navigator.clipboard.writeText(currentToken);
+						void navigator.clipboard.writeText(currentToken);
 						new Notice("API token copied to clipboard");
 					} else {
 						new Notice("No API token set");

@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
 import { Notice, Plugin } from "obsidian";
 import { MCPPluginSettings, DEFAULT_SETTINGS } from "./types";
 import { ScriptLoader } from "@obsiscripta/obsidian-script-loader";
