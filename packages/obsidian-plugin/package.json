@@ -15,6 +15,7 @@
 	"license": "0-BSD",
 	"devDependencies": {
 		"@eslint/js": "^9.39.2",
+		"@types/diff": "^8.0.0",
 		"@types/node": "^16.18.126",
 		"esbuild": "^0.25.12",
 		"eslint": "^9.39.2",
@@ -29,6 +30,7 @@
 		"@hono/node-server": "^1.19.9",
 		"@obsiscripta/obsidian-script-loader": "workspace:*",
 		"@obsiscripta/shared": "workspace:*",
+		"diff": "^8.0.3",
 		"hono": "^4.11.7",
 		"obsidian": "latest",
 		"sucrase": "^3.35.1"
