@@ -1,4 +1,4 @@
-import { TFile } from "obsidian";
+import { normalizePath, TFile } from "obsidian";
 import { MCPToolDefinition, MCPToolResult } from "../types";
 
 /**
@@ -21,9 +21,11 @@ export const readNoteTool: MCPToolDefinition = {
 	handler: async (args, context): Promise<MCPToolResult> => {
 		const path = args.path as string;
 
-		// Normalize path: add .md if not present
-		let normalizedPath = path;
-		if (!normalizedPath.endsWith(".md")) {
+		// Normalize path using Obsidian's helper (handles path separators)
+		let normalizedPath = normalizePath(path);
+
+		// Add .md extension if not present (case-insensitive check)
+		if (!normalizedPath.toLowerCase().endsWith(".md")) {
 			normalizedPath = `${normalizedPath}.md`;
 		}
 
