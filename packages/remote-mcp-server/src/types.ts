@@ -105,21 +105,3 @@ export interface PluginToken {
 // =============================================================================
 // MCP Types
 // =============================================================================
-
-/**
- * MCP Tool definition used internally
- */
-export interface MCPToolDefinition {
-	name: string;
-	description: string;
-	inputSchema: Record<string, unknown>;
-}
-
-/**
- * Tool polling state
- */
-export interface PollingState {
-	lastHash: string;
-	tools: Map<string, MCPToolDefinition>;
-	lastError?: Error;
-}

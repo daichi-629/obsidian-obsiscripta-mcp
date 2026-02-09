@@ -11,7 +11,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { PluginClient } from "../plugin/plugin-client.js";
 import type { TokenStore } from "../store/token-store.js";
-import type { MCPToolDefinition, MCPContent, PollingState, Tool } from "../types.js";
+import type { MCPContent, Tool } from "../types.js";
 import { SERVER_VERSION } from "../config.js";
 
 interface RequestContext {
