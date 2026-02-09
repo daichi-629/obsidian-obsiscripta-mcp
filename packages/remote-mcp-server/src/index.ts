@@ -37,12 +37,8 @@ async function main(): Promise<void> {
 	// Periodic cleanup of expired tokens
 	const cleanupTimer = setInterval(() => store.cleanup(), 60_000);
 
-	// Initialize MCP server with token store and default plugin config
-	const remoteMcpServer = new RemoteMcpServer(store, {
-		host: config.pluginHost,
-		port: config.pluginPort,
-		token: config.pluginToken,
-	});
+	// Initialize MCP server with token store
+	const remoteMcpServer = new RemoteMcpServer(store);
 
 	// Build Hono application
 	const app = new Hono();
@@ -85,9 +81,6 @@ async function main(): Promise<void> {
 	const mcpRoutes = createMcpTransportRoutes(remoteMcpServer);
 	app.route("/", mcpRoutes);
 
-	// Start tool polling
-	remoteMcpServer.startPolling();
-
 	// Start HTTP server
 	const server = serve(
 		{
@@ -105,9 +98,6 @@ async function main(): Promise<void> {
 			console.error(
 				`[Server] OAuth metadata: ${config.externalUrl}/.well-known/oauth-authorization-server`
 			);
-			console.error(
-				`[Server] Plugin target: ${config.pluginHost}:${config.pluginPort}`
-			);
 		}
 	);
 
@@ -115,7 +105,6 @@ async function main(): Promise<void> {
 	const shutdown = async () => {
 		console.error("\n[Server] Shutting down...");
 		clearInterval(cleanupTimer);
-		remoteMcpServer.stopPolling();
 		await closeAllTransports();
 		server.close();
 		process.exit(0);

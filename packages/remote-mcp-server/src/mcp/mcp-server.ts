@@ -26,49 +26,18 @@ const SERVER_INFO = {
 	version: SERVER_VERSION,
 } as const;
 
-const DEFAULT_POLLING_INTERVAL = 5000;
-
-export interface DefaultPluginConfig {
-	host: string;
-	port: number;
-	token: string;
-}
-
 /**
  * Creates and configures an MCP server that proxies tools from the Obsidian plugin.
  * Supports per-user plugin configurations.
  */
 export class RemoteMcpServer {
 	readonly mcpServer: McpServer;
-	private pollingInterval: number;
-	private pollingTimer: ReturnType<typeof setInterval> | null = null;
-	private pollingState: PollingState = {
-		lastHash: "",
-		tools: new Map(),
-	};
-	private isRunning = false;
 	private pluginClients = new Map<number, PluginClient>();
-	private defaultPluginClient: PluginClient;
-	private sessionUsers = new Map<string, number>();
 
-	constructor(
-		private store: TokenStore,
-		private defaultPluginConfig: DefaultPluginConfig,
-		pollingInterval: number = DEFAULT_POLLING_INTERVAL
-	) {
-		this.pollingInterval = pollingInterval;
-
-		// Create default plugin client for polling and fallback
-		this.defaultPluginClient = new PluginClient({
-			host: defaultPluginConfig.host,
-			port: defaultPluginConfig.port,
-			token: defaultPluginConfig.token,
-			requireAuth: !!defaultPluginConfig.token,
-		});
-
+	constructor(private store: TokenStore) {
 		this.mcpServer = new McpServer(SERVER_INFO, {
 			capabilities: {
-				tools: { listChanged: true },
+				tools: {},
 			},
 		});
 
@@ -78,7 +47,7 @@ export class RemoteMcpServer {
 	/**
 	 * Get or create a PluginClient for a specific user
 	 */
-	private getPluginClientForUser(githubUserId: number): PluginClient {
+	private getPluginClientForUser(githubUserId: number): PluginClient | null {
 		// Check cache first
 		const cached = this.pluginClients.get(githubUserId);
 		if (cached) {
@@ -88,10 +57,10 @@ export class RemoteMcpServer {
 		// Get user's plugin token
 		const pluginToken = this.store.getPluginTokenByUserId(githubUserId);
 
-		// If no user-specific config, use default
+		// If no user-specific config, return null
 		if (!pluginToken) {
-			console.error(`[RemoteMcpServer] No plugin token for user ${githubUserId}, using default`);
-			return this.defaultPluginClient;
+			console.error(`[RemoteMcpServer] No plugin token for user ${githubUserId}`);
+			return null;
 		}
 
 		// Create new client for this user
@@ -121,12 +90,13 @@ export class RemoteMcpServer {
 	/**
 	 * Get plugin client for the current request context
 	 */
-	private getCurrentPluginClient(): PluginClient {
+	private getCurrentPluginClient(): PluginClient | null {
 		const context = requestContext.getStore();
 
-		// If no context or user ID, use default
+		// If no context or user ID, return null
 		if (!context?.githubUserId) {
-			return this.defaultPluginClient;
+			console.error(`[RemoteMcpServer] No user context available`);
+			return null;
 		}
 
 		return this.getPluginClientForUser(context.githubUserId);
@@ -137,17 +107,32 @@ export class RemoteMcpServer {
 		this.mcpServer.server.setRequestHandler(
 			ListToolsRequestSchema,
 			async () => {
-				const tools = Array.from(this.pollingState.tools.values()).map(
-					(tool: MCPToolDefinition) => ({
-						name: tool.name,
-						description: tool.description,
-						inputSchema: {
-							...tool.inputSchema,
-							type: "object" as const,
-						},
-					})
-				);
-				return { tools };
+				const pluginClient = this.getCurrentPluginClient();
+
+				if (!pluginClient) {
+					return {
+						tools: [],
+					};
+				}
+
+				try {
+					const response = await pluginClient.listTools();
+					return {
+						tools: response.tools.map((tool: Tool) => ({
+							name: tool.name,
+							description: tool.description,
+							inputSchema: {
+								...tool.inputSchema,
+								type: "object" as const,
+							},
+						})),
+					};
+				} catch (error) {
+					console.error(`[RemoteMcpServer] Failed to list tools:`, error);
+					return {
+						tools: [],
+					};
+				}
 			}
 		);
 
@@ -157,18 +142,21 @@ export class RemoteMcpServer {
 			async (request) => {
 				const { name, arguments: args = {} } = request.params;
 
-				if (!this.pollingState.tools.has(name)) {
-					return {
-						content: [
-							{ type: "text", text: `Error: Tool '${name}' not found` },
-						],
-						isError: true,
-					};
-				}
-
 				try {
 					// Get the appropriate plugin client for this request
 					const pluginClient = this.getCurrentPluginClient();
+
+					if (!pluginClient) {
+						return {
+							content: [
+								{
+									type: "text",
+									text: `Error: No plugin configuration found for user`,
+								},
+							],
+							isError: true,
+						};
+					}
 
 					const response = await pluginClient.callTool(
 						name,
@@ -205,83 +193,4 @@ export class RemoteMcpServer {
 		);
 	}
 
-	/**
-	 * Start polling for tool changes from the plugin
-	 */
-	startPolling(): void {
-		if (this.pollingTimer) return;
-
-		this.isRunning = true;
-		this.syncTools().catch(() => {});
-
-		this.pollingTimer = setInterval(async () => {
-			await this.syncTools();
-		}, this.pollingInterval);
-
-		console.error(
-			`[RemoteMcpServer] Started polling (interval: ${this.pollingInterval}ms)`
-		);
-	}
-
-	/**
-	 * Stop polling for tool changes
-	 */
-	stopPolling(): void {
-		if (this.pollingTimer) {
-			clearInterval(this.pollingTimer);
-			this.pollingTimer = null;
-		}
-		this.isRunning = false;
-		console.error("[RemoteMcpServer] Stopped polling");
-	}
-
-	/**
-	 * Synchronize tools from the plugin
-	 */
-	async syncTools(): Promise<void> {
-		try {
-			const response = await this.defaultPluginClient.listTools();
-
-			if (response.hash === this.pollingState.lastHash) {
-				return;
-			}
-
-			console.error(
-				`[RemoteMcpServer] Tool list changed (hash: ${response.hash})`
-			);
-
-			this.pollingState.tools.clear();
-
-			for (const tool of response.tools) {
-				const def = this.convertToMCPToolDefinition(tool);
-				this.pollingState.tools.set(def.name, def);
-			}
-
-			this.pollingState.lastHash = response.hash;
-			this.pollingState.lastError = undefined;
-
-			if (this.isRunning) {
-				this.mcpServer.sendToolListChanged();
-			}
-		} catch (error) {
-			this.pollingState.lastError =
-				error instanceof Error ? error : new Error(String(error));
-			console.error(
-				"[RemoteMcpServer] Failed to sync tools:",
-				this.pollingState.lastError.message
-			);
-		}
-	}
-
-	getPollingState(): Readonly<PollingState> {
-		return this.pollingState;
-	}
-
-	private convertToMCPToolDefinition(tool: Tool): MCPToolDefinition {
-		return {
-			name: tool.name,
-			description: tool.description,
-			inputSchema: tool.inputSchema,
-		};
-	}
 }

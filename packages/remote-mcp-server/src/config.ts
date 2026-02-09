@@ -20,13 +20,6 @@ export interface ServerConfig {
 	/** GitHub OAuth App client secret */
 	githubClientSecret: string;
 
-	/** Obsidian plugin host */
-	pluginHost: string;
-	/** Obsidian plugin port */
-	pluginPort: number;
-	/** Auth token for plugin communication */
-	pluginToken: string;
-
 	/** Admin API secret for managing plugin tokens */
 	adminSecret: string;
 
@@ -46,10 +39,6 @@ export function loadConfig(): ServerConfig {
 
 		githubClientId: requireEnv("GITHUB_CLIENT_ID"),
 		githubClientSecret: requireEnv("GITHUB_CLIENT_SECRET"),
-
-		pluginHost: env("PLUGIN_HOST") ?? "127.0.0.1",
-		pluginPort: intEnv("PLUGIN_PORT", 3000),
-		pluginToken: env("PLUGIN_TOKEN") ?? "",
 
 		adminSecret: requireEnv("ADMIN_SECRET"),
 		sessionSecret:
