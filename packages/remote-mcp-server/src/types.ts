@@ -94,6 +94,10 @@ export interface PluginToken {
 	token: string;
 	pluginHost: string;
 	pluginPort: number;
+	/** GitHub user ID this plugin token is associated with */
+	githubUserId: number;
+	/** Whether authentication is required for plugin communication */
+	requireAuth: boolean;
 	createdAt: number;
 	lastUsedAt?: number;
 }

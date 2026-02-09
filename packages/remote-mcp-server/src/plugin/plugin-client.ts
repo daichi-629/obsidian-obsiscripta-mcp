@@ -26,6 +26,8 @@ export interface PluginClientConfig {
 	host: string;
 	port: number;
 	token: string;
+	/** Whether authentication is required for plugin communication */
+	requireAuth: boolean;
 	timeout?: number;
 	useTls?: boolean;
 }
@@ -36,12 +38,14 @@ export class PluginClient {
 	private readonly baseUrl: string;
 	private readonly timeout: number;
 	private readonly token: string;
+	private readonly requireAuth: boolean;
 
 	constructor(config: PluginClientConfig) {
 		const protocol = config.useTls ? "https" : "http";
 		this.baseUrl = `${protocol}://${config.host}:${config.port}/bridge/v1`;
 		this.timeout = config.timeout ?? DEFAULT_TIMEOUT;
 		this.token = config.token;
+		this.requireAuth = config.requireAuth;
 	}
 
 	async health(): Promise<HealthResponse> {
@@ -87,8 +91,8 @@ export class PluginClient {
 				Accept: "application/json",
 			};
 
-			// Add auth token if configured
-			if (this.token) {
+			// Add auth token if authentication is required
+			if (this.requireAuth && this.token) {
 				headers["Authorization"] = `Bearer ${this.token}`;
 			}
 

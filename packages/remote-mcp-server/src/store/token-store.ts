@@ -136,6 +136,27 @@ export class TokenStore {
 		return undefined;
 	}
 
+	/**
+	 * Get plugin token for a specific GitHub user
+	 */
+	getPluginTokenByUserId(githubUserId: number): PluginToken | undefined {
+		for (const token of this.pluginTokens.values()) {
+			if (token.githubUserId === githubUserId) {
+				return token;
+			}
+		}
+		return undefined;
+	}
+
+	/**
+	 * List plugin tokens for a specific GitHub user
+	 */
+	listPluginTokensByUserId(githubUserId: number): PluginToken[] {
+		return Array.from(this.pluginTokens.values()).filter(
+			(token) => token.githubUserId === githubUserId
+		);
+	}
+
 	// =========================================================================
 	// Cleanup
 	// =========================================================================

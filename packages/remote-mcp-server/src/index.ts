@@ -16,7 +16,6 @@ import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
 import { loadConfig, SERVER_VERSION } from "./config.js";
 import { TokenStore } from "./store/token-store.js";
-import { PluginClient } from "./plugin/plugin-client.js";
 import { RemoteMcpServer } from "./mcp/mcp-server.js";
 import {
 	createMcpTransportRoutes,
@@ -38,15 +37,12 @@ async function main(): Promise<void> {
 	// Periodic cleanup of expired tokens
 	const cleanupTimer = setInterval(() => store.cleanup(), 60_000);
 
-	// Initialize plugin client with configured token
-	const pluginClient = new PluginClient({
+	// Initialize MCP server with token store and default plugin config
+	const remoteMcpServer = new RemoteMcpServer(store, {
 		host: config.pluginHost,
 		port: config.pluginPort,
 		token: config.pluginToken,
 	});
-
-	// Initialize MCP server with tool proxying
-	const remoteMcpServer = new RemoteMcpServer(pluginClient);
 
 	// Build Hono application
 	const app = new Hono();
