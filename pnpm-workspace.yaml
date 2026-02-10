@@ -5,3 +5,4 @@ packages:
   - packages/remote-mcp-server
   - packages/script-loader-core
   - packages/obsidian-script-loader
+  - packages/integration-tests

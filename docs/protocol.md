@@ -1,9 +1,20 @@
-# Bridge Protocol v1
+# Bridge Protocol
 
-This document specifies the HTTP protocol exposed by the ObsiScripta Bridge
+This document specifies the HTTP protocols exposed by the ObsiScripta Bridge
 plugin and consumed by the stdio bridge.
 
-## Overview
+## Available Protocols
+
+The bridge server exposes two protocol endpoints:
+
+1. **v1 API** (Legacy): Custom HTTP API at `/bridge/v1/*`
+2. **MCP Standard** (Recommended): JSON-RPC 2.0 over HTTP at `/mcp`
+
+Both protocols are available simultaneously for backward compatibility.
+
+## v1 API (Legacy)
+
+### Overview
 
 - Transport: HTTP (JSON over localhost)
 - Base URL: `http://127.0.0.1:{port}/bridge/v1`
@@ -190,3 +201,209 @@ curl -s -X POST http://127.0.0.1:3000/bridge/v1/tools/read_note/call \
   -H 'Content-Type: application/json' \
   -d '{"arguments":{"path":"Notes/Example.md"}}'
 ```
+
+## MCP Standard HTTP (Recommended)
+
+### Overview
+
+- Transport: JSON-RPC 2.0 over HTTP (Streamable HTTP transport)
+- Endpoint: `http://127.0.0.1:{port}/mcp`
+- Protocol version: MCP 2025-03-26
+- Encoding: UTF-8 JSON (`Content-Type: application/json`)
+
+This endpoint implements the MCP (Model Context Protocol) standard as specified
+in the [MCP specification](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports).
+
+### JSON-RPC 2.0 Format
+
+All requests and responses follow the JSON-RPC 2.0 specification.
+
+**Request structure:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/list",
+  "params": {}
+}
+```
+
+**Response structure (success):**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "tools": [...]
+  }
+}
+```
+
+**Response structure (error):**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": {
+    "code": -32601,
+    "message": "Method not found"
+  }
+}
+```
+
+### Supported Methods
+
+#### tools/list
+
+List all available tools.
+
+**Request:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/list",
+  "params": {}
+}
+```
+
+**Response:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "tools": [
+      {
+        "name": "read_note",
+        "description": "Read a note by path",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string" }
+          },
+          "required": ["path"]
+        }
+      }
+    ]
+  }
+}
+```
+
+#### tools/call
+
+Execute a tool by name.
+
+**Request:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "read_note",
+    "arguments": {
+      "path": "Notes/Example.md"
+    }
+  }
+}
+```
+
+**Response (success):**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Note content here..."
+      }
+    ],
+    "isError": false
+  }
+}
+```
+
+**Response (tool execution error):**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Error: File not found"
+      }
+    ],
+    "isError": true
+  }
+}
+```
+
+### Error Codes
+
+Standard JSON-RPC 2.0 error codes:
+
+- `-32700`: Parse error (invalid JSON)
+- `-32600`: Invalid request (malformed JSON-RPC)
+- `-32601`: Method not found
+- `-32602`: Invalid params
+- `-32603`: Internal error
+
+### Examples
+
+List tools:
+
+```bash
+curl -s -X POST http://127.0.0.1:3000/mcp \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/list",
+    "params": {}
+  }'
+```
+
+Call a tool:
+
+```bash
+curl -s -X POST http://127.0.0.1:3000/mcp \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "tools/call",
+    "params": {
+      "name": "read_note",
+      "arguments": {
+        "path": "Notes/Example.md"
+      }
+    }
+  }'
+```
+
+### Session Management
+
+Session management with `Mcp-Session-Id` header is planned for Phase 3 of the
+migration. Currently, the endpoint operates in a stateless mode.
+
+### Current Limitations (Phase 1)
+
+- No SSE streaming support (returns single JSON response)
+- No session management (`Mcp-Session-Id` header not yet supported)
+- No pagination support for tools/list
+- No server-initiated requests or notifications
+
+These features will be added in subsequent migration phases.

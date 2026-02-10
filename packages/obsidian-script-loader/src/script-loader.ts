@@ -13,6 +13,7 @@ import { ScriptExecutionContext } from "./types";
 import { ObsidianVaultAdapter, EventRegistrar } from "./adapters/obsidian-vault-adapter";
 import { ObsidianPathUtils } from "./adapters/obsidian-path-utils";
 import { ObsidianLogger } from "./adapters/obsidian-logger";
+import { ObsidianModuleResolver } from "./adapters/obsidian-module-resolver";
 
 /**
  * Obsidian-specific wrapper for ScriptLoaderCore.
@@ -113,11 +114,12 @@ export class ScriptLoader {
 	 */
 	static createRuntime(
 		contextConfig: ExecutionContextConfig,
-		_vault: Vault,
+		vault: Vault,
 		options?: FunctionRuntimeOptions
 	): ScriptRuntime {
 		const pathUtils = options?.pathUtils ?? new ObsidianPathUtils();
-		const runtimeOptions: FunctionRuntimeOptions = { ...options, pathUtils };
+		const moduleResolver = options?.moduleResolver ?? new ObsidianModuleResolver(vault, pathUtils);
+		const runtimeOptions: FunctionRuntimeOptions = { ...options, pathUtils, moduleResolver };
 
 		return new FunctionRuntime(contextConfig, runtimeOptions);
 	}
@@ -127,8 +129,8 @@ export class ScriptLoader {
 	 */
 	static createExecutor(
 		contextConfig: ExecutionContextConfig,
-		_vault: Vault
+		vault: Vault
 	): ScriptRuntime {
-		return ScriptLoader.createRuntime(contextConfig, _vault);
+		return ScriptLoader.createRuntime(contextConfig, vault);
 	}
 }

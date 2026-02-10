@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Plugin, Setting, Notice } from "obsidian";
+import { App, Notice, PluginSettingTab, Plugin, Setting } from "obsidian";
 import { SettingsStore } from "./settings-store";
 import { ToolSource } from "../mcp/tools/registry";
 import { ExampleManager } from "../mcp/tools/scripting/example-manager";
@@ -34,6 +34,13 @@ export class MCPSettingTab extends PluginSettingTab {
 		}, TIMER_DELAY);
 	}
 
+	private maskApiKey(apiKey: string): string {
+		if (apiKey.length <= 8) {
+			return "*".repeat(apiKey.length);
+		}
+		return `${apiKey.slice(0, 4)}…${apiKey.slice(-4)}`;
+	}
+
 	display(): void {
 		const { containerEl } = this;
 
@@ -52,8 +59,8 @@ export class MCPSettingTab extends PluginSettingTab {
 			cls: "mcp-settings-warning-title",
 		});
 		const bindWarningText = settings.bindHost === "0.0.0.0"
-			? "Warning: the server binds to all network interfaces (0.0.0.0). It is accessible from other devices on your network. No authentication is required."
-			: "Warning: the server binds to localhost only (127.0.0.1). No authentication is required.";
+			? "Warning: the server binds to all network interfaces (0.0.0.0). It is accessible from other devices on your network. Bridge v1 has no authentication."
+			: "Warning: the server binds to localhost only (127.0.0.1). Bridge v1 has no authentication.";
 		warningEl.createEl("p", {
 			text: bindWarningText,
 			cls: "mcp-settings-warning-body",
@@ -124,44 +131,6 @@ export class MCPSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("API token")
-			.setDesc(
-				"Bearer token for remote MCP server authentication. " +
-				"When set, all Bridge API requests require this token. " +
-				"Leave empty for local-only access without authentication (requires restart).",
-			)
-			.addText((text) => {
-				text.inputEl.type = "password";
-				text.inputEl.addClass("monospace-input");
-				return text
-					.setPlaceholder("No token (open access)")
-					.setValue(settings.apiToken)
-					.onChange(async (value) => {
-						await this.settingsStore.updateApiToken(value);
-						this.scheduleDisplay();
-					});
-			})
-			.addButton((button) =>
-				button.setButtonText("Generate").onClick(async () => {
-					const token = generateSecureToken();
-					await this.settingsStore.updateApiToken(token);
-					this.display();
-					new Notice("API token generated. Restart required.");
-				}),
-			)
-			.addButton((button) =>
-				button.setButtonText("Copy").onClick(() => {
-					const currentToken = this.settingsStore.getSettings().apiToken;
-					if (currentToken) {
-						void navigator.clipboard.writeText(currentToken);
-						new Notice("API token copied to clipboard");
-					} else {
-						new Notice("No API token set");
-					}
-				}),
-			);
-
-		new Setting(containerEl)
 			.setName("Server control")
 			.setDesc("Start, stop, or restart the server")
 			.addButton((button) =>
@@ -186,6 +155,51 @@ export class MCPSettingTab extends PluginSettingTab {
 					updateServerStatus();
 				}),
 			);
+
+		new Setting(containerEl).setName("Mcp authentication").setHeading();
+
+		containerEl.createEl("p", {
+			text: "Mcp standard (/mcp) requires an API key. Bridge v1 (/bridge/v1) remains unauthenticated for v1 compatibility.",
+			cls: "setting-item-description",
+		});
+
+		new Setting(containerEl)
+			.setName("Issue an API key")
+			.setDesc("Generate a new key for stdio bridge. Save the key securely; it is not recoverable if lost.")
+			.addButton((button) =>
+				button.setButtonText("Generate").onClick(async () => {
+					const issuedKey = await this.settingsStore.issueMcpApiKey();
+					navigator.clipboard
+						.writeText(issuedKey)
+						.then(() => {
+							new Notice("A new mcp API key was issued and copied to clipboard");
+						})
+						.catch(() => {
+							new Notice(`A new mcp API key was issued: ${issuedKey}`);
+						});
+					this.display();
+				}),
+			);
+
+		const mcpApiKeys = this.settingsStore.getMcpApiKeys();
+		if (mcpApiKeys.length === 0) {
+			containerEl.createEl("p", {
+				text: "No mcp API keys have been issued yet. /mcp requests are rejected until a key is created.",
+				cls: "setting-item-description",
+			});
+		} else {
+			for (const apiKey of mcpApiKeys) {
+				new Setting(containerEl)
+					.setName(this.maskApiKey(apiKey))
+					.setDesc("Use this value as the API key environment variable in the stdio bridge")
+					.addButton((button) =>
+						button.setButtonText("Revoke").setWarning().onClick(async () => {
+							await this.settingsStore.revokeMcpApiKey(apiKey);
+							this.display();
+						}),
+					);
+			}
+		}
 
 		new Setting(containerEl).setName("Script tools").setHeading();
 
@@ -296,15 +310,4 @@ export class MCPSettingTab extends PluginSettingTab {
 			}
 		}
 	}
-}
-
-/**
- * Generate a cryptographically secure random token (URL-safe base64, 32 bytes).
- */
-function generateSecureToken(): string {
-	const bytes = new Uint8Array(32);
-	crypto.getRandomValues(bytes);
-	// URL-safe base64 encoding
-	const base64 = btoa(String.fromCharCode(...bytes));
-	return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }

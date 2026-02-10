@@ -9,7 +9,7 @@ interface BridgeSettings {
 	autoStart: boolean;
 	port: number;
 	bindHost: string;
-	apiToken: string;
+	mcpApiKeys: string[];
 }
 
 // Owns the bridge server lifecycle and user-facing notices.
@@ -44,7 +44,8 @@ export class BridgeController {
 		return (
 			this.runningSettings.port !== this.settings.port ||
 			this.runningSettings.bindHost !== this.settings.bindHost ||
-			this.runningSettings.apiToken !== this.settings.apiToken
+			this.runningSettings.mcpApiKeys.join("\n") !==
+				this.settings.mcpApiKeys.join("\n")
 		);
 	}
 
@@ -73,7 +74,7 @@ export class BridgeController {
 			executor,
 			this.settings.port,
 			this.settings.bindHost,
-			this.settings.apiToken,
+			this.settings.mcpApiKeys,
 		);
 		try {
 			await this.server.start();

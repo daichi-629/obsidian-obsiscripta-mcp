@@ -4,12 +4,13 @@ import { MCPPluginSettings } from "../settings";
 import { MCPToolDefinition } from "../mcp/tools/types";
 import { ToolRegistry, ToolSource } from "../mcp/tools/registry";
 import { getBuiltinNoteTools } from "../mcp/tools/builtin/notes";
+import { getBuiltinEditTools } from "../mcp/tools/builtin/edit";
 import {
 	ScriptLoader,
 	ScriptRegistry,
 } from "@obsiscripta/obsidian-script-loader";
 import { createObsidianContextConfig } from "../mcp/tools/scripting/context-config";
-import { validateAndConvertScriptExports } from "../mcp/tools/scripting/script-validator";
+import { isToolDefinitionLike, validateAndConvertScriptExports } from "../mcp/tools/scripting/script-validator";
 import { ExampleManager } from "../mcp/tools/scripting/example-manager";
 import { EventRegistrar, ScriptExecutionContext } from "./context";
 
@@ -48,6 +49,9 @@ export class ToolingManager {
 		for (const tool of getBuiltinNoteTools()) {
 			this.registry.register(tool, ToolSource.Builtin);
 		}
+		for (const tool of getBuiltinEditTools()) {
+			this.registry.register(tool, ToolSource.Builtin);
+		}
 
 		const scriptsPath = this.settings.scriptsPath ?? "";
 
@@ -65,6 +69,11 @@ export class ToolingManager {
 			scriptsPath,
 			{
 				onScriptLoaded: (metadata, exports) => {
+					if (!isToolDefinitionLike(exports)) {
+						console.debug(`[Bridge] Ignoring non-tool script file: ${metadata.path}`);
+						return;
+					}
+
 					try {
 						// Validate and convert script exports to MCP tool definition
 						const tool = validateAndConvertScriptExports(exports, metadata.path, metadata.name);
