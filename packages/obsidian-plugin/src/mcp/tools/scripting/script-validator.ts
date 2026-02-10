@@ -1,5 +1,14 @@
 import { MCPToolDefinition } from "../types";
 
+export function isToolDefinitionLike(exports: unknown): exports is Partial<MCPToolDefinition> {
+	if (!exports || typeof exports !== "object") {
+		return false;
+	}
+
+	const obj = exports as Partial<MCPToolDefinition>;
+	return Boolean(obj.description || obj.inputSchema || obj.handler);
+}
+
 /**
  * Validates that an exported object has the shape of an MCPToolDefinition.
  * The tool name is provided by the loader (derived from script path) rather than

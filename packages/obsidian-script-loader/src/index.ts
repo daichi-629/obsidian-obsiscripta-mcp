@@ -18,6 +18,7 @@ export type { EventRegistrar } from "./adapters/obsidian-vault-adapter";
 export { ObsidianVaultAdapter } from "./adapters/obsidian-vault-adapter";
 export { ObsidianPathUtils } from "./adapters/obsidian-path-utils";
 export { ObsidianLogger } from "./adapters/obsidian-logger";
+export { ObsidianModuleResolver } from "./adapters/obsidian-module-resolver";
 
 // ============================================================================
 // Re-export core classes for convenience
