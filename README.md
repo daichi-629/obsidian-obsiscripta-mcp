@@ -29,7 +29,7 @@ It is designed to be script-extensible, so you can add your own custom tools wit
 - `examples/`
   Script tool examples
 - `docs/`
-  Protocol and release documentation
+  Protocol and project documentation
 
 ## Architecture overview
 
@@ -135,7 +135,7 @@ See [docs/protocol.md](docs/protocol.md) for details.
 1. Open **Settings → Community plugins → ObsiScripta Bridge** in Obsidian.
 2. Confirm host/port in **Connection info** (example: `127.0.0.1:3000`).
 3. Create an MCP API key in plugin settings.
-4. Download the `obsidian-mcp` binary for your OS from GitHub Releases.
+4. Download the `obsidian-mcp` binary for your OS from the project distribution assets.
 5. Add the server entry to your Claude Desktop MCP config:
 
 ```json
@@ -210,22 +210,6 @@ pnpm run test:integration
 
 Integration tests are organized under `packages/integration-tests`.
 
-## Versioning
-
-Use root scripts to keep versions synchronized in this monorepo:
-
-```bash
-pnpm run version:patch
-pnpm run version:minor
-pnpm run version:major
-pnpm run version:bump <x.y.z>
-```
-
-## Release
-
-For the GitHub Actions release workflow and expected assets, see [docs/release.md](docs/release.md).
-
 ## References
 
 - Obsidian API docs: https://docs.obsidian.md
-- Releases: https://github.com/daichi-629/obsidian-obsiscripta-mcp/releases
