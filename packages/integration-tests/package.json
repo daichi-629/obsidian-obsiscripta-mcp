@@ -7,6 +7,12 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "@types/node": "^20.19.30"
+  },
+  "dependencies": {
+    "hono": "^4.11.7",
+    "@hono/node-server": "^1.19.9",
+    "@obsiscripta/remote-mcp-server": "workspace:*"
   }
 }

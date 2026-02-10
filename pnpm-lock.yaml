@@ -9,10 +9,23 @@ importers:
   .: {}
 
   packages/integration-tests:
+    dependencies:
+      '@hono/node-server':
+        specifier: ^1.19.9
+        version: 1.19.9(hono@4.11.7)
+      '@obsiscripta/remote-mcp-server':
+        specifier: workspace:*
+        version: link:../remote-mcp-server
+      hono:
+        specifier: ^4.11.7
+        version: 4.11.7
     devDependencies:
+      '@types/node':
+        specifier: ^20.19.30
+        version: 20.19.30
       vitest:
         specifier: ^2.1.8
-        version: 2.1.9(@types/node@22.19.7)
+        version: 2.1.9(@types/node@20.19.30)
 
   packages/obsidian-plugin:
     dependencies:
