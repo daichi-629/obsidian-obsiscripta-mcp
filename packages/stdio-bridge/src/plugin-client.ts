@@ -13,6 +13,7 @@ import type {
 import type {
 	PluginClientConfig,
 	HealthResponse,
+	Tool,
 	ToolListResponse,
 	ToolCallResponse,
 	ErrorResponse,
@@ -103,24 +104,11 @@ export class PluginClient {
 	 * @returns Health response with status, version, and protocol version
 	 */
 	async health(): Promise<HealthResponse> {
-		if (this.shouldUseMcpFirst()) {
-			try {
-				await this.mcpToolsList();
-				return {
-					status: "ok",
-					version: "unknown",
-					protocolVersion: "mcp-standard-http",
-				};
-			} catch (error) {
-				if (!this.canFallbackToV1()) {
-					throw error;
-				}
-				this.logFallback("health", error);
-				return this.v1Request<HealthResponse>("GET", "/health");
-			}
-		}
-
-		return this.v1Request<HealthResponse>("GET", "/health");
+		return this.executeWithTransportFallback(
+			"health",
+			() => this.mcpHealth(),
+			() => this.v1Health()
+		);
 	}
 
 	/**
@@ -128,28 +116,11 @@ export class PluginClient {
 	 * @returns Tool list response with tools array and hash
 	 */
 	async listTools(): Promise<ToolListResponse> {
-		if (this.shouldUseMcpFirst()) {
-			try {
-				const result = await this.mcpToolsList();
-				const tools = result.tools.map((tool) => ({
-					name: tool.name,
-					description: tool.description ?? "",
-					inputSchema: tool.inputSchema ?? {},
-				}));
-				const hash = createHash("sha256")
-					.update(JSON.stringify(tools))
-					.digest("hex");
-				return { tools, hash };
-			} catch (error) {
-				if (!this.canFallbackToV1()) {
-					throw error;
-				}
-				this.logFallback("listTools", error);
-				return this.v1Request<ToolListResponse>("GET", "/tools");
-			}
-		}
-
-		return this.v1Request<ToolListResponse>("GET", "/tools");
+		return this.executeWithTransportFallback(
+			"listTools",
+			() => this.mcpListTools(),
+			() => this.v1ListTools()
+		);
 	}
 
 	/**
@@ -163,38 +134,10 @@ export class PluginClient {
 		toolName: string,
 		args: Record<string, unknown> = {}
 	): Promise<ToolCallResponse> {
-		if (this.shouldUseMcpFirst()) {
-			try {
-				const result = await this.mcpToolsCall(toolName, args);
-				const content = this.normalizeMcpContent(result.content);
-				if (result.isError) {
-					return {
-						success: false,
-						content,
-						isError: true,
-					};
-				}
-				return {
-					success: true,
-					content,
-				};
-			} catch (error) {
-				if (!this.canFallbackToV1()) {
-					throw error;
-				}
-				this.logFallback("callTool", error);
-				return this.v1Request<ToolCallResponse>(
-					"POST",
-					`/tools/${encodeURIComponent(toolName)}/call`,
-					{ arguments: args }
-				);
-			}
-		}
-
-		return this.v1Request<ToolCallResponse>(
-			"POST",
-			`/tools/${encodeURIComponent(toolName)}/call`,
-			{ arguments: args }
+		return this.executeWithTransportFallback(
+			"callTool",
+			() => this.mcpCallTool(toolName, args),
+			() => this.v1CallTool(toolName, args)
 		);
 	}
 
@@ -223,6 +166,94 @@ export class PluginClient {
 		initialDelayMs: number = RETRY_CONFIG.initialDelayMs
 	): Promise<HealthResponse> {
 		return this.withRetry(() => this.health(), maxRetries, initialDelayMs);
+	}
+
+	private async executeWithTransportFallback<T>(
+		operation: string,
+		mcpOperation: () => Promise<T>,
+		v1Operation: () => Promise<T>
+	): Promise<T> {
+		if (!this.shouldUseMcpFirst()) {
+			return v1Operation();
+		}
+
+		try {
+			return await mcpOperation();
+		} catch (error) {
+			if (!this.canFallbackToV1()) {
+				throw error;
+			}
+			this.logFallback(operation, error);
+			return v1Operation();
+		}
+	}
+
+	private async mcpHealth(): Promise<HealthResponse> {
+		await this.mcpToolsList();
+		return {
+			status: "ok",
+			version: "unknown",
+			protocolVersion: "mcp-standard-http",
+		};
+	}
+
+	private async v1Health(): Promise<HealthResponse> {
+		return this.v1Request<HealthResponse>("GET", "/health");
+	}
+
+	private async mcpListTools(): Promise<ToolListResponse> {
+		const result = await this.mcpToolsList();
+		const tools = this.convertMcpTools(result.tools);
+		return {
+			tools,
+			hash: this.hashTools(tools),
+		};
+	}
+
+	private async v1ListTools(): Promise<ToolListResponse> {
+		return this.v1Request<ToolListResponse>("GET", "/tools");
+	}
+
+	private async mcpCallTool(
+		toolName: string,
+		args: Record<string, unknown>
+	): Promise<ToolCallResponse> {
+		const result = await this.mcpToolsCall(toolName, args);
+		const content = this.normalizeMcpContent(result.content);
+		if (result.isError) {
+			return {
+				success: false,
+				content,
+				isError: true,
+			};
+		}
+		return {
+			success: true,
+			content,
+		};
+	}
+
+	private async v1CallTool(
+		toolName: string,
+		args: Record<string, unknown>
+	): Promise<ToolCallResponse> {
+		return this.v1Request<ToolCallResponse>(
+			"POST",
+			`/tools/${encodeURIComponent(toolName)}/call`,
+			{ arguments: args }
+		);
+	}
+
+	private convertMcpTools(tools: ListToolsResult["tools"]): Tool[] {
+		return tools.map((tool) => ({
+			name: tool.name,
+			description: tool.description ?? "",
+			inputSchema: tool.inputSchema ?? {},
+		}));
+	}
+
+	private hashTools(tools: Tool[]): string {
+		return createHash("sha256").update(JSON.stringify(tools)).digest("hex");
 	}
 
 	/**
@@ -294,7 +325,6 @@ export class PluginClient {
 		);
 	}
 
-
 	private normalizeMcpContent(content: unknown): MCPContent[] {
 		if (!Array.isArray(content)) {
 			return [];
@@ -344,7 +374,11 @@ export class PluginClient {
 			method,
 			params,
 		};
-		const response = await this.fetchJson<JSONRPCResponse>(this.mcpBaseUrl, "POST", body);
+		const response = await this.fetchJson<JSONRPCResponse>(
+			this.mcpBaseUrl,
+			"POST",
+			body
+		);
 		if ("error" in response) {
 			const error = (response as JSONRPCErrorResponse).error;
 			throw new PluginClientError(
