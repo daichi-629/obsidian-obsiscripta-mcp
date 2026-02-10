@@ -101,9 +101,12 @@ describe("SettingsStore", () => {
 			await settingsStore.updateSetting("port", 9000);
 
 			expect(changeHandler).toHaveBeenCalledOnce();
-			const [oldSettings, newSettings] = changeHandler.mock.calls[0];
-			expect(oldSettings.port).toBe(3000);
-			expect(newSettings.port).toBe(9000);
+			const calls = changeHandler.mock.calls[0];
+			if (calls) {
+				const [oldSettings, newSettings] = calls;
+				expect(oldSettings.port).toBe(3000);
+				expect(newSettings.port).toBe(9000);
+			}
 		});
 
 		it("should save settings after update", async () => {

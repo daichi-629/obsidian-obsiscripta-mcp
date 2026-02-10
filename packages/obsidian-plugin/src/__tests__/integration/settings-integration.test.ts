@@ -144,6 +144,7 @@ describe("Settings Integration", () => {
 						type: "object",
 						properties: {},
 					},
+					handler: async () => ({ content: [{ type: "text", text: "test" }] }),
 				},
 				1 as any // ToolSource.Builtin
 			);
@@ -196,6 +197,7 @@ describe("Settings Integration", () => {
 						name,
 						description: "Test tool",
 						inputSchema: { type: "object", properties: {} },
+						handler: async () => ({ content: [{ type: "text", text: "test" }] }),
 					},
 					1 as any
 				);
@@ -225,6 +227,7 @@ describe("Settings Integration", () => {
 					name: "someTool",
 					description: "Test tool",
 					inputSchema: { type: "object", properties: {} },
+					handler: async () => ({ content: [{ type: "text", text: "test" }] }),
 				},
 				1 as any
 			);

@@ -13,7 +13,8 @@ export default tseslint.config(
 				projectService: {
 					allowDefaultProject: [
 						'eslint.config.js',
-						'manifest.json'
+						'manifest.json',
+						'vitest.config.ts'
 					]
 				},
 				tsconfigRootDir: import.meta.dirname,
@@ -22,6 +23,18 @@ export default tseslint.config(
 		},
 	},
 	...obsidianmd.configs.recommended,
+	// Relax rules for test files
+	{
+		files: ['**/__tests__/**/*.ts', '**/*.test.ts', '**/*.spec.ts'],
+		rules: {
+			'@typescript-eslint/no-explicit-any': 'off',
+			'@typescript-eslint/no-unsafe-argument': 'off',
+			'@typescript-eslint/no-unsafe-assignment': 'off',
+			'@typescript-eslint/no-unsafe-member-access': 'off',
+			'@typescript-eslint/no-unsafe-call': 'off',
+			'@typescript-eslint/unbound-method': 'off',
+		},
+	},
 	globalIgnores([
 		"node_modules",
 		"dist",

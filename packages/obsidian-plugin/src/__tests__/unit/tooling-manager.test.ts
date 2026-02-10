@@ -222,6 +222,7 @@ describe("ToolingManager - Settings Integration", () => {
 						type: "object",
 						properties: {},
 					},
+					handler: async () => ({ content: [{ type: "text", text: "test" }] }),
 				},
 				1 as any // ToolSource.Builtin
 			);

@@ -104,7 +104,7 @@ describe("BridgeController - Settings Integration", () => {
 		it("should detect when mcpApiKeys change", async () => {
 			bridgeController.subscribeToSettings(settingsStore);
 
-			const newKey = await settingsStore.issueMcpApiKey();
+			await settingsStore.issueMcpApiKey();
 
 			expect(bridgeController.needsRestart()).toBe(true);
 		});
@@ -260,8 +260,8 @@ describe("BridgeController - Settings Integration", () => {
 
 			// autoStart is a bridge setting, should trigger update
 			// Note: This doesn't trigger restart since it's not checked in needsRestart
-			const runningSettings = bridgeController.getRunningSettings();
-			// After subscription and update, internal settings should not match running
+			// After subscription and update, internal settings should be updated
+			expect(bridgeController.getRunningSettings()).not.toBeNull();
 		});
 	});
 });
