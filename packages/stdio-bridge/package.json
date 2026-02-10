@@ -13,7 +13,7 @@
 		"build": "tsc -p tsconfig.json --emitDeclarationOnly && node esbuild.config.mjs production",
 		"dev": "node esbuild.config.mjs",
 		"build:binary": "node esbuild.config.mjs production && mkdir -p dist/pkg && PKG_CACHE_PATH=.pkg-cache pkg --targets node18-linux-x64,node18-win-x64 --out-path dist/pkg dist/obsidian-mcp.cjs",
-		"test:e2e": "vitest run"
+		"test:integration": "pnpm --filter @obsiscripta/integration-tests run test"
 	},
 	"keywords": [
 		"obsidian",

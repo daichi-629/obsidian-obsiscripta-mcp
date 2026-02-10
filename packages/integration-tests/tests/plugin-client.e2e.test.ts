@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
-import { PluginClient } from '../src/plugin-client.js';
+import { PluginClient } from '../../stdio-bridge/src/plugin-client.js';
 
 async function startFakeServer(
   handler: (req: IncomingMessage, res: ServerResponse) => void,

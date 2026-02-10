@@ -146,6 +146,18 @@ See `examples/dataview-example.js`, `examples/templater-example.js`, and `exampl
 Use **Settings → Community plugins** to enable the plugin.
 Settings include script folder helper actions and server control.
 
+## Testing
+
+```bash
+pnpm run test
+```
+
+Integration tests are collected in `packages/integration-tests` so cross-package behavior (plugin + stdio bridge + script loader) is easy to find and run in one place.
+
+```bash
+pnpm run test:integration
+```
+
 ## Linting
 
 ```bash

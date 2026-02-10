@@ -3,8 +3,8 @@ import { BridgeServer } from '../../obsidian-plugin/src/mcp/server.js';
 import { ToolExecutor } from '../../obsidian-plugin/src/mcp/tools/executor.js';
 import { ToolRegistry, ToolSource } from '../../obsidian-plugin/src/mcp/tools/registry.js';
 import { validateAndConvertScriptExports } from '../../obsidian-plugin/src/mcp/tools/scripting/script-validator.js';
-import { PluginClient } from '../src/plugin-client.js';
-import { StdioBridgeServer } from '../src/bridge-server.js';
+import { PluginClient } from '../../stdio-bridge/src/plugin-client.js';
+import { StdioBridgeServer } from '../../stdio-bridge/src/bridge-server.js';
 import {
   FunctionRuntime,
   ScriptCompiler,
