@@ -12,7 +12,8 @@
 		"prebuild": "pnpm --filter @obsiscripta/shared run build",
 		"build": "tsc -p tsconfig.json --emitDeclarationOnly && node esbuild.config.mjs production",
 		"dev": "node esbuild.config.mjs",
-		"build:binary": "node esbuild.config.mjs production && mkdir -p dist/pkg && PKG_CACHE_PATH=.pkg-cache pkg --targets node18-linux-x64,node18-win-x64 --out-path dist/pkg dist/obsidian-mcp.cjs"
+		"build:binary": "node esbuild.config.mjs production && mkdir -p dist/pkg && PKG_CACHE_PATH=.pkg-cache pkg --targets node18-linux-x64,node18-win-x64 --out-path dist/pkg dist/obsidian-mcp.cjs",
+		"test:integration": "pnpm --filter @obsiscripta/integration-tests run test"
 	},
 	"keywords": [
 		"obsidian",
@@ -25,7 +26,8 @@
 		"@types/node": "^20.19.30",
 		"esbuild": "0.25.5",
 		"pkg": "^5.8.1",
-		"typescript": "^5.9.3"
+		"typescript": "^5.9.3",
+		"vitest": "^2.1.8"
 	},
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.25.3",

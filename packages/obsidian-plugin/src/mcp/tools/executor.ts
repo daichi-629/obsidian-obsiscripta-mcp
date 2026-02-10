@@ -51,4 +51,18 @@ export class ToolExecutor {
 	isToolAvailable(toolName: string): boolean {
 		return this.registry.has(toolName) && this.registry.isEnabled(toolName);
 	}
+
+	/**
+	 * Get the tool registry (for MCP standard HTTP handlers)
+	 */
+	getRegistry(): ToolRegistry {
+		return this.registry;
+	}
+
+	/**
+	 * Get the app context (for MCP standard HTTP handlers)
+	 */
+	getContext(): AppContext {
+		return this.context;
+	}
 }
