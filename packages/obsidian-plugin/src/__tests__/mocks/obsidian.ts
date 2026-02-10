@@ -67,8 +67,11 @@ export class Plugin {
 
 // Re-export types
 export type TAbstractFile = any;
-export type TFile = any;
-export type TFolder = any;
+export class TFile {
+	path = "";
+	basename = "";
+}
+export class TFolder {}
 
 // Path normalization function
 export function normalizePath(path: string): string {
