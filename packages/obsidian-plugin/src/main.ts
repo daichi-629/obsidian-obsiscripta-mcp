@@ -19,8 +19,11 @@ export default class MCPPlugin extends Plugin {
 			return;
 		}
 
-		// Initialize settings store and load settings
-		this.settingsStore = new SettingsStore(this);
+		// Initialize settings store with Obsidian persistence layer
+		this.settingsStore = new SettingsStore({
+			load: async () => (await this.loadData()) as Partial<MCPPluginSettings>,
+			save: async (settings) => await this.saveData(settings),
+		});
 		await this.settingsStore.load();
 		this.settings = this.settingsStore.getSettings() as MCPPluginSettings;
 
@@ -52,11 +55,60 @@ export default class MCPPlugin extends Plugin {
 		);
 		await this.bridgeController.startIfEnabled();
 
-		// Inject services into settings store
-		this.settingsStore.setServices(
-			this.toolingManager,
-			this.bridgeController,
-		);
+		// Subscribe to settings changes to update services
+		this.settingsStore.on("change", (oldSettings, newSettings) => {
+			void (async () => {
+			// Check if API keys changed (order-insensitive comparison)
+			const apiKeysChanged =
+				oldSettings.mcpApiKeys.length !== newSettings.mcpApiKeys.length ||
+				!oldSettings.mcpApiKeys.every((key) => newSettings.mcpApiKeys.includes(key));
+
+			// Update BridgeController if bridge-related settings changed
+			const bridgeSettingsChanged =
+				oldSettings.port !== newSettings.port ||
+				oldSettings.bindHost !== newSettings.bindHost ||
+				oldSettings.autoStart !== newSettings.autoStart ||
+				apiKeysChanged;
+
+			if (bridgeSettingsChanged) {
+				this.bridgeController.updateSettings({
+					port: newSettings.port,
+					bindHost: newSettings.bindHost,
+					autoStart: newSettings.autoStart,
+					mcpApiKeys: [...newSettings.mcpApiKeys],
+				});
+			}
+
+			// Update ToolingManager if scriptsPath changed
+			if (oldSettings.scriptsPath !== newSettings.scriptsPath) {
+				try {
+					await this.toolingManager.updateScriptsPath(newSettings.scriptsPath);
+					console.debug(`[Bridge] Scripts path updated to: ${newSettings.scriptsPath}`);
+				} catch (error) {
+					console.error("[Bridge] Failed to update scripts path:", error);
+					new Notice("Failed to update scripts folder");
+				}
+			}
+
+			// Update ToolingManager if disabledTools changed
+			const oldDisabled = new Set(oldSettings.disabledTools);
+			const newDisabled = new Set(newSettings.disabledTools);
+
+			// Tools newly disabled
+			for (const tool of newDisabled) {
+				if (!oldDisabled.has(tool)) {
+					this.toolingManager.setToolEnabled(tool, false);
+				}
+			}
+
+			// Tools newly enabled
+			for (const tool of oldDisabled) {
+				if (!newDisabled.has(tool)) {
+					this.toolingManager.setToolEnabled(tool, true);
+				}
+			}
+			})();
+		});
 
 		// Add settings tab with dependency injection
 		this.addSettingTab(
@@ -64,6 +116,8 @@ export default class MCPPlugin extends Plugin {
 				this.app,
 				this,
 				this.settingsStore,
+				this.bridgeController,
+				this.toolingManager,
 				this.toolingManager.getExampleManager(),
 			),
 		);
@@ -82,7 +136,7 @@ export default class MCPPlugin extends Plugin {
 			id: "restart-server",
 			name: "Restart server",
 			callback: () => {
-				void this.settingsStore.restartServer();
+				void this.bridgeController.restart();
 			},
 		});
 
