@@ -13,6 +13,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.19.9
         version: 1.19.9(hono@4.11.7)
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.25.3
+        version: 1.25.3(hono@4.11.7)(zod@4.3.6)
       '@obsiscripta/obsidian-script-loader':
         specifier: workspace:*
         version: link:../obsidian-script-loader
