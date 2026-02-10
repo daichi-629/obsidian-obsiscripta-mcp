@@ -45,6 +45,7 @@ export default class MCPPlugin extends Plugin {
 				autoStart: this.settings.autoStart,
 				port: this.settings.port,
 				bindHost: this.settings.bindHost,
+				enableBridgeV1: this.settings.enableBridgeV1,
 				mcpApiKeys: [...this.settings.mcpApiKeys],
 			},
 			this.toolingManager.registry,

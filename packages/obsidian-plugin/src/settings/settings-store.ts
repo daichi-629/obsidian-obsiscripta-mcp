@@ -106,6 +106,12 @@ export class SettingsStore {
 	}
 
 
+	async updateEnableBridgeV1(value: boolean): Promise<void> {
+		this.settings.enableBridgeV1 = value;
+		await this.save();
+		this.bridgeController?.updateSettings({ enableBridgeV1: value });
+	}
+
 	private generateMcpApiKey(): string {
 		const bytes = new Uint8Array(24);
 		crypto.getRandomValues(bytes);

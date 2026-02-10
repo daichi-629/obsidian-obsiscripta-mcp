@@ -9,6 +9,7 @@ interface BridgeSettings {
 	autoStart: boolean;
 	port: number;
 	bindHost: string;
+	enableBridgeV1: boolean;
 	mcpApiKeys: string[];
 }
 
@@ -44,6 +45,8 @@ export class BridgeController {
 		return (
 			this.runningSettings.port !== this.settings.port ||
 			this.runningSettings.bindHost !== this.settings.bindHost ||
+			this.runningSettings.enableBridgeV1 !==
+				this.settings.enableBridgeV1 ||
 			this.runningSettings.mcpApiKeys.join("\n") !==
 				this.settings.mcpApiKeys.join("\n")
 		);
@@ -74,6 +77,7 @@ export class BridgeController {
 			executor,
 			this.settings.port,
 			this.settings.bindHost,
+			this.settings.enableBridgeV1,
 			this.settings.mcpApiKeys,
 		);
 		try {
