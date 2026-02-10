@@ -53,6 +53,7 @@ afterEach(async () => {
 
 describe('script-loader-core + ToolExecutor + BridgeServer + stdio-bridge full integration', () => {
   it('propagates initial load and hot-reload updates through stdio-bridge tool execution', async () => {
+    const apiKey = 'test-api-key';
     const scriptHost = new MockScriptHost();
     const pathUtils = new MockPathUtils();
     const logger = new MockLogger();
@@ -110,11 +111,16 @@ describe('script-loader-core + ToolExecutor + BridgeServer + stdio-bridge full i
     cleanup.push(() => loader.stop());
 
     const port = await getFreePort();
-    const bridgeServer = new BridgeServer(executor, port);
+    const bridgeServer = new BridgeServer(executor, port, '127.0.0.1', [apiKey]);
     await bridgeServer.start();
     cleanup.push(() => bridgeServer.stop());
 
-    const pluginClient = new PluginClient({ port, transportMode: 'mcp', timeout: 1000 });
+    const pluginClient = new PluginClient({
+      port,
+      transportMode: 'mcp',
+      timeout: 1000,
+      apiKey,
+    });
     const stdioBridge = new StdioBridgeServer(pluginClient, 50);
 
     await stdioBridge.syncTools();
