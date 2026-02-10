@@ -137,7 +137,8 @@ export class PluginClient {
 		return this.executeWithTransportFallback(
 			"callTool",
 			() => this.mcpCallTool(toolName, args),
-			() => this.v1CallTool(toolName, args)
+			() => this.v1CallTool(toolName, args),
+			{ allowFallback: false }
 		);
 	}
 
@@ -171,8 +172,11 @@ export class PluginClient {
 	private async executeWithTransportFallback<T>(
 		operation: string,
 		mcpOperation: () => Promise<T>,
-		v1Operation: () => Promise<T>
+		v1Operation: () => Promise<T>,
+		options: { allowFallback?: boolean } = {}
 	): Promise<T> {
+		const allowFallback = options.allowFallback ?? true;
+
 		if (!this.shouldUseMcpFirst()) {
 			return v1Operation();
 		}
@@ -180,7 +184,7 @@ export class PluginClient {
 		try {
 			return await mcpOperation();
 		} catch (error) {
-			if (!this.canFallbackToV1()) {
+			if (!allowFallback || !this.canFallbackToV1()) {
 				throw error;
 			}
 			this.logFallback(operation, error);
