@@ -5,7 +5,7 @@ Extensible, script-focused bridge API server for Obsidian vault operations.
 Important notes:
 - Desktop only (no mobile support).
 - Script extensions run with full API access and no sandbox.
-- The server binds to localhost only and has no authentication.
+- Bridge v1 has no authentication; MCP Standard endpoint uses API key authentication.
 
 ## Features
 
@@ -55,11 +55,13 @@ The bridge server exposes two protocol endpoints simultaneously:
 1. **MCP Standard HTTP** (Recommended): `http://127.0.0.1:3000/mcp`
    - JSON-RPC 2.0 over HTTP
    - Implements MCP specification 2025-03-26
+   - Requires API key (`X-ObsiScripta-Api-Key` or `Authorization: Bearer ...`)
    - For use with MCP-compatible clients
 
 2. **Bridge Protocol v1** (Legacy): `http://127.0.0.1:3000/bridge/v1`
    - Custom HTTP API
    - Maintained for backward compatibility
+   - No authentication (v1 compatibility)
    - Used by the stdio bridge as a fallback transport
 
 See [docs/protocol.md](docs/protocol.md) for detailed protocol specifications.
@@ -69,9 +71,10 @@ See [docs/protocol.md](docs/protocol.md) for detailed protocol specifications.
 1. Open **Settings → Community plugins → ObsiScripta Bridge**.
 2. Check the endpoint shown under **Connection info**.
    - Example: `http://127.0.0.1:3000`
-3. Download the stdio bridge binary for your OS from the GitHub release assets:
+3. In plugin settings, create an MCP API key (you can issue multiple keys).
+4. Download the stdio bridge binary for your OS from the GitHub release assets:
    - https://github.com/daichi-629/obsidian-obsiscripta-mcp/releases
-4. Add a server entry in your Claude Desktop MCP configuration:
+5. Add a server entry in your Claude Desktop MCP configuration:
 
 ```json
 {
@@ -80,7 +83,8 @@ See [docs/protocol.md](docs/protocol.md) for detailed protocol specifications.
       "command": "/path/to/obsidian-mcp",
       "env": {
         "OBSIDIAN_MCP_HOST": "127.0.0.1",
-        "OBSIDIAN_MCP_PORT": "3000"
+        "OBSIDIAN_MCP_PORT": "3000",
+        "OBSIDIAN_MCP_API_KEY": "obsi_..."
       }
     }
   }
@@ -100,6 +104,9 @@ Optional environment variable:
   - `auto` (default): MCP Standard first, then Bridge v1 fallback
   - `mcp`: MCP Standard only (no fallback)
   - `v1`: Bridge v1 only
+- `OBSIDIAN_MCP_API_KEY=<issued key from plugin settings>`
+  - Required for MCP Standard endpoint authentication
+  - Ignored when `OBSIDIAN_MCP_TRANSPORT=v1`
 
 ## Script tools
 

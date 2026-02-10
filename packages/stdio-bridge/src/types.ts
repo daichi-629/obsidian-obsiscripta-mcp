@@ -35,6 +35,7 @@ export interface PluginClientConfig {
 	port: number;
 	timeout: number;
 	transportMode: TransportMode;
+	apiKey: string;
 }
 
 /**

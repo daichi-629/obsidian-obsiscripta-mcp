@@ -1,4 +1,5 @@
 import { Notice, Plugin } from "obsidian";
+import { randomBytes } from "node:crypto";
 import { MCPPluginSettings, DEFAULT_SETTINGS } from "./types";
 import { ScriptLoader } from "@obsiscripta/obsidian-script-loader";
 import { ToolingManager } from "../plugin/tooling-manager";
@@ -45,6 +46,11 @@ export class SettingsStore {
 		// Normalize disabledTools array
 		this.settings.disabledTools = Array.isArray(this.settings.disabledTools)
 			? Array.from(new Set(this.settings.disabledTools))
+			: [];
+
+		// Normalize auth key list
+		this.settings.mcpApiKeys = Array.isArray(this.settings.mcpApiKeys)
+			? Array.from(new Set(this.settings.mcpApiKeys.filter((key) => typeof key === "string" && key.length > 0)))
 			: [];
 
 		// Normalize scriptsPath
@@ -98,6 +104,24 @@ export class SettingsStore {
 		this.settings.bindHost = value;
 		await this.save();
 		this.bridgeController?.updateSettings({ bindHost: value });
+	}
+
+	getMcpApiKeys(): readonly string[] {
+		return this.settings.mcpApiKeys;
+	}
+
+	async issueMcpApiKey(): Promise<string> {
+		const key = `obsi_${randomBytes(24).toString("base64url")}`;
+		this.settings.mcpApiKeys = [...this.settings.mcpApiKeys, key];
+		await this.save();
+		this.bridgeController?.updateSettings({ mcpApiKeys: this.settings.mcpApiKeys });
+		return key;
+	}
+
+	async revokeMcpApiKey(key: string): Promise<void> {
+		this.settings.mcpApiKeys = this.settings.mcpApiKeys.filter((existing) => existing !== key);
+		await this.save();
+		this.bridgeController?.updateSettings({ mcpApiKeys: this.settings.mcpApiKeys });
 	}
 
 	/**

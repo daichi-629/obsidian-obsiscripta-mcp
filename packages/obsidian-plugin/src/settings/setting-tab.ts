@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Plugin, Setting } from "obsidian";
+import { App, Notice, PluginSettingTab, Plugin, Setting } from "obsidian";
 import { SettingsStore } from "./settings-store";
 import { ToolSource } from "../mcp/tools/registry";
 import { ExampleManager } from "../mcp/tools/scripting/example-manager";
@@ -34,6 +34,13 @@ export class MCPSettingTab extends PluginSettingTab {
 		}, TIMER_DELAY);
 	}
 
+	private maskApiKey(apiKey: string): string {
+		if (apiKey.length <= 8) {
+			return "*".repeat(apiKey.length);
+		}
+		return `${apiKey.slice(0, 4)}…${apiKey.slice(-4)}`;
+	}
+
 	display(): void {
 		const { containerEl } = this;
 
@@ -52,8 +59,8 @@ export class MCPSettingTab extends PluginSettingTab {
 			cls: "mcp-settings-warning-title",
 		});
 		const bindWarningText = settings.bindHost === "0.0.0.0"
-			? "Warning: the server binds to all network interfaces (0.0.0.0). It is accessible from other devices on your network. No authentication is required."
-			: "Warning: the server binds to localhost only (127.0.0.1). No authentication is required.";
+			? "Warning: the server binds to all network interfaces (0.0.0.0). It is accessible from other devices on your network. Bridge v1 has no authentication."
+			: "Warning: the server binds to localhost only (127.0.0.1). Bridge v1 has no authentication.";
 		warningEl.createEl("p", {
 			text: bindWarningText,
 			cls: "mcp-settings-warning-body",
@@ -148,6 +155,51 @@ export class MCPSettingTab extends PluginSettingTab {
 					updateServerStatus();
 				}),
 			);
+
+		new Setting(containerEl).setName("MCP authentication").setHeading();
+
+		containerEl.createEl("p", {
+			text: "MCP Standard (/mcp) requires an API key. Bridge v1 (/bridge/v1) remains unauthenticated for v1 compatibility.",
+			cls: "setting-item-description",
+		});
+
+		new Setting(containerEl)
+			.setName("Issue API key")
+			.setDesc("Generate a new key for stdio bridge. Save the key securely; it is not recoverable if lost.")
+			.addButton((button) =>
+				button.setButtonText("Generate").onClick(async () => {
+					const issuedKey = await this.settingsStore.issueMcpApiKey();
+					navigator.clipboard
+						.writeText(issuedKey)
+						.then(() => {
+							new Notice("New MCP API key issued and copied to clipboard");
+						})
+						.catch(() => {
+							new Notice(`New MCP API key issued: ${issuedKey}`);
+						});
+					this.display();
+				}),
+			);
+
+		const mcpApiKeys = this.settingsStore.getMcpApiKeys();
+		if (mcpApiKeys.length === 0) {
+			containerEl.createEl("p", {
+				text: "No MCP API keys issued yet. /mcp requests are rejected until a key is created.",
+				cls: "setting-item-description",
+			});
+		} else {
+			for (const apiKey of mcpApiKeys) {
+				new Setting(containerEl)
+					.setName(this.maskApiKey(apiKey))
+					.setDesc("Use as OBSIDIAN_MCP_API_KEY in stdio bridge")
+					.addButton((button) =>
+						button.setButtonText("Revoke").setWarning().onClick(async () => {
+							await this.settingsStore.revokeMcpApiKey(apiKey);
+							this.display();
+						}),
+					);
+			}
+		}
 
 		new Setting(containerEl).setName("Script tools").setHeading();
 

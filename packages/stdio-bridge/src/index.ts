@@ -30,6 +30,7 @@ function resolveTransportMode(): TransportMode {
 function resolveBridgeConfig() {
 	const host = process.env.OBSIDIAN_MCP_HOST?.trim() || DEFAULT_HOST;
 	const portValue = process.env.OBSIDIAN_MCP_PORT?.trim() ?? String(DEFAULT_PORT);
+	const apiKey = process.env.OBSIDIAN_MCP_API_KEY?.trim() ?? "";
 	const parsedPort = Number.parseInt(portValue, 10);
 	const port = Number.isFinite(parsedPort) && parsedPort > 0 ? parsedPort : DEFAULT_PORT;
 
@@ -39,17 +40,23 @@ function resolveBridgeConfig() {
 		);
 	}
 
-	return { host, port };
+	return { host, port, apiKey };
 }
 
 async function runCli() {
-	const { host, port } = resolveBridgeConfig();
+	const { host, port, apiKey } = resolveBridgeConfig();
 	const transportMode = resolveTransportMode();
+	if ((transportMode === "auto" || transportMode === "mcp") && !apiKey) {
+		console.error(
+			"[stdio-bridge] OBSIDIAN_MCP_API_KEY is empty. MCP endpoint authentication will fail until a key is configured."
+		);
+	}
 	const pluginClient = new PluginClient({
 		host,
 		port,
 		timeout: 5000,
 		transportMode,
+		apiKey,
 	});
 	const server = new StdioBridgeServer(pluginClient);
 

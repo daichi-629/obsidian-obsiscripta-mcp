@@ -4,6 +4,7 @@ export interface MCPPluginSettings {
 	autoStart: boolean;
 	scriptsPath: string;
 	disabledTools: string[];
+	mcpApiKeys: string[];
 }
 
 export const DEFAULT_SETTINGS: MCPPluginSettings = {
@@ -12,4 +13,5 @@ export const DEFAULT_SETTINGS: MCPPluginSettings = {
 	autoStart: true,
 	scriptsPath: "mcp-tools",
 	disabledTools: [],
+	mcpApiKeys: [],
 };
