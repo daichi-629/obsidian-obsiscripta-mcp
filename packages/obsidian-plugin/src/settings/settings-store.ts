@@ -47,6 +47,11 @@ export class SettingsStore {
 			? Array.from(new Set(this.settings.disabledTools))
 			: [];
 
+		// Normalize auth key list
+		this.settings.mcpApiKeys = Array.isArray(this.settings.mcpApiKeys)
+			? Array.from(new Set(this.settings.mcpApiKeys.filter((key) => typeof key === "string" && key.length > 0)))
+			: [];
+
 		// Normalize scriptsPath
 		const normalizedPath = ScriptLoader.normalizeScriptsPath(
 			this.settings.scriptsPath,
@@ -98,6 +103,36 @@ export class SettingsStore {
 		this.settings.bindHost = value;
 		await this.save();
 		this.bridgeController?.updateSettings({ bindHost: value });
+	}
+
+
+	private generateMcpApiKey(): string {
+		const bytes = new Uint8Array(24);
+		crypto.getRandomValues(bytes);
+		let binary = "";
+		for (const b of bytes) {
+			binary += String.fromCharCode(b);
+		}
+		const encoded = btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+		return `obsi_${encoded}`;
+	}
+
+	getMcpApiKeys(): readonly string[] {
+		return this.settings.mcpApiKeys;
+	}
+
+	async issueMcpApiKey(): Promise<string> {
+		const key = this.generateMcpApiKey();
+		this.settings.mcpApiKeys = [...this.settings.mcpApiKeys, key];
+		await this.save();
+		this.bridgeController?.updateSettings({ mcpApiKeys: this.settings.mcpApiKeys });
+		return key;
+	}
+
+	async revokeMcpApiKey(key: string): Promise<void> {
+		this.settings.mcpApiKeys = this.settings.mcpApiKeys.filter((existing) => existing !== key);
+		await this.save();
+		this.bridgeController?.updateSettings({ mcpApiKeys: this.settings.mcpApiKeys });
 	}
 
 	/**

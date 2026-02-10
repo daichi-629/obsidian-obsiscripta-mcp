@@ -16,6 +16,7 @@ export class BridgeServer {
 	private httpServer: ServerType | null = null;
 	private sockets = new Set<Socket>();
 	private readonly executor: ToolExecutor;
+	private readonly mcpApiKeys: ReadonlySet<string>;
 	private port: number;
 	private host: string;
 	private app: Hono;
@@ -24,11 +25,34 @@ export class BridgeServer {
 		executor: ToolExecutor,
 		port: number = 3000,
 		host: string = "127.0.0.1",
+		mcpApiKeys: readonly string[] = [],
 	) {
 		this.executor = executor;
 		this.port = port;
 		this.host = host;
+		this.mcpApiKeys = new Set(mcpApiKeys);
 		this.app = this.createApp();
+	}
+
+	private getMcpApiKeyFromHeader(authorizationHeader: string | undefined, apiKeyHeader: string | undefined): string | null {
+		if (apiKeyHeader && apiKeyHeader.trim().length > 0) {
+			return apiKeyHeader.trim();
+		}
+
+		if (!authorizationHeader) {
+			return null;
+		}
+
+		const [scheme, token] = authorizationHeader.split(" ");
+		if (!scheme || !token) {
+			return null;
+		}
+
+		if (scheme.toLowerCase() !== "bearer") {
+			return null;
+		}
+
+		return token.trim();
 	}
 
 	/**
@@ -53,9 +77,44 @@ export class BridgeServer {
 			cors({
 				origin: "*",
 				allowMethods: ["GET", "POST", "OPTIONS"],
-				allowHeaders: ["Content-Type", "Mcp-Session-Id"],
+				allowHeaders: ["Content-Type", "Mcp-Session-Id", "Authorization", "X-ObsiScripta-Api-Key"],
 			}),
 		);
+
+		app.use("/mcp", async (c, next) => {
+			if (c.req.method === "OPTIONS") {
+				return await next();
+			}
+
+			if (this.mcpApiKeys.size === 0) {
+				return c.json(
+					{
+						error: "Authentication not configured",
+						message:
+							"MCP authentication is required. Generate at least one API key in plugin settings.",
+					},
+					503,
+				);
+			}
+
+			const providedKey = this.getMcpApiKeyFromHeader(
+				c.req.header("authorization"),
+				c.req.header("x-obsiscripta-api-key"),
+			);
+
+			if (!providedKey || !this.mcpApiKeys.has(providedKey)) {
+				return c.json(
+					{
+						error: "Unauthorized",
+						message:
+							"Invalid or missing MCP API key. Pass OBSIDIAN_MCP_API_KEY from stdio bridge.",
+					},
+					401,
+				);
+			}
+
+			return await next();
+		});
 
 		// Body size limit middleware for v1 API
 		app.use("/bridge/v1/*", async (c, next) => {

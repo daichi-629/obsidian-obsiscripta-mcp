@@ -28,6 +28,41 @@ afterEach(async () => {
 });
 
 describe('PluginClient Fake HTTP fallback E2E', () => {
+  it('sends MCP API key header on MCP requests', async () => {
+    let receivedApiKey: string | undefined;
+
+    const fake = await startFakeServer((req, res) => {
+      if (req.method === 'POST' && req.url === '/mcp') {
+        receivedApiKey = req.headers['x-obsiscripta-api-key'] as string | undefined;
+        res.setHeader('content-type', 'application/json');
+        res.end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            result: {
+              tools: [],
+            },
+          }),
+        );
+        return;
+      }
+
+      res.statusCode = 404;
+      res.end(JSON.stringify({ error: 'not found', message: 'not found' }));
+    });
+    cleanup.push(fake.close);
+
+    const client = new PluginClient({
+      port: fake.port,
+      timeout: 200,
+      transportMode: 'mcp',
+      apiKey: 'obsi_test_key',
+    });
+    await client.listTools();
+
+    expect(receivedApiKey).toBe('obsi_test_key');
+  });
+
   it('falls back from MCP to v1 listTools in auto transport mode', async () => {
     const fake = await startFakeServer((req, res) => {
       if (req.method === 'POST' && req.url === '/mcp') {
@@ -93,5 +128,38 @@ describe('PluginClient Fake HTTP fallback E2E', () => {
       name: 'PluginClientError',
     });
     expect(v1ToolsRequests).toBe(0);
+  });
+
+  it('falls back to v1 without sending MCP API key to v1 endpoint', async () => {
+    let v1ApiKeyHeader: string | undefined;
+
+    const fake = await startFakeServer((req, res) => {
+      if (req.method === 'POST' && req.url === '/mcp') {
+        res.statusCode = 401;
+        res.end(JSON.stringify({ error: 'Unauthorized', message: 'Unauthorized' }));
+        return;
+      }
+
+      if (req.method === 'GET' && req.url === '/bridge/v1/tools') {
+        v1ApiKeyHeader = req.headers['x-obsiscripta-api-key'] as string | undefined;
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({ tools: [], hash: 'v1' }));
+        return;
+      }
+
+      res.statusCode = 404;
+      res.end(JSON.stringify({ error: 'not found', message: 'not found' }));
+    });
+    cleanup.push(fake.close);
+
+    const client = new PluginClient({
+      port: fake.port,
+      timeout: 200,
+      transportMode: 'auto',
+      apiKey: 'obsi_test_key',
+    });
+
+    await client.listTools();
+    expect(v1ApiKeyHeader).toBeUndefined();
   });
 });

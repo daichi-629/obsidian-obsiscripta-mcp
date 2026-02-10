@@ -58,6 +58,7 @@ const DEFAULT_CONFIG = {
 	port: 3000,
 	timeout: 5000, // 5 seconds
 	transportMode: "auto" as const,
+	apiKey: "",
 } as const;
 
 /**
@@ -77,6 +78,7 @@ export class PluginClient {
 	private readonly mcpBaseUrl: string;
 	private readonly timeout: number;
 	private readonly transportMode: TransportMode;
+	private readonly apiKey: string;
 	private preferredTransport: "mcp" | "v1";
 	private fallbackCount = 0;
 	private requestId = 1;
@@ -87,11 +89,13 @@ export class PluginClient {
 			port: config?.port ?? DEFAULT_CONFIG.port,
 			timeout: config?.timeout ?? DEFAULT_CONFIG.timeout,
 			transportMode: config?.transportMode ?? DEFAULT_CONFIG.transportMode,
+			apiKey: config?.apiKey ?? DEFAULT_CONFIG.apiKey,
 		};
 		this.v1BaseUrl = `http://${mergedConfig.host}:${mergedConfig.port}/bridge/v1`;
 		this.mcpBaseUrl = `http://${mergedConfig.host}:${mergedConfig.port}/mcp`;
 		this.timeout = mergedConfig.timeout;
 		this.transportMode = mergedConfig.transportMode;
+		this.apiKey = mergedConfig.apiKey;
 		this.preferredTransport = mergedConfig.transportMode === "v1" ? "v1" : "mcp";
 
 		console.error(
@@ -394,7 +398,8 @@ export class PluginClient {
 		const response = await this.fetchJson<JSONRPCResponse>(
 			this.mcpBaseUrl,
 			"POST",
-			body
+			body,
+			this.apiKey
 		);
 		if ("error" in response) {
 			const error = (response as JSONRPCErrorResponse).error;
@@ -420,24 +425,30 @@ export class PluginClient {
 		path: string,
 		body?: unknown
 	): Promise<T> {
-		return this.fetchJson<T>(`${this.v1BaseUrl}${path}`, method, body);
+		return this.fetchJson<T>(`${this.v1BaseUrl}${path}`, method, body, "");
 	}
 
 	private async fetchJson<T>(
 		url: string,
 		method: "GET" | "POST",
-		body?: unknown
+		body?: unknown,
+		apiKey: string = ""
 	): Promise<T> {
 		const controller = new AbortController();
 		const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
 		try {
+			const headers: Record<string, string> = {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+			};
+			if (apiKey) {
+				headers["X-ObsiScripta-Api-Key"] = apiKey;
+			}
+
 			const response = await fetch(url, {
 				method,
-				headers: {
-					"Content-Type": "application/json",
-					Accept: "application/json",
-				},
+				headers,
 				body: body ? JSON.stringify(body) : undefined,
 				signal: controller.signal,
 			});
