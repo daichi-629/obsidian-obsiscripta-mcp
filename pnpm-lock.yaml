@@ -6,11 +6,7 @@ settings:
 
 importers:
 
-  .:
-    dependencies:
-      diff-match-patch:
-        specifier: ^1.0.5
-        version: 1.0.5
+  .: {}
 
   packages/integration-tests:
     dependencies:
@@ -45,9 +41,6 @@ importers:
       '@obsiscripta/shared':
         specifier: workspace:*
         version: link:../shared
-      diff:
-        specifier: ^8.0.3
-        version: 8.0.3
       diff-match-patch:
         specifier: ^1.0.5
         version: 1.0.5
