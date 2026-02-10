@@ -151,6 +151,7 @@ export abstract class SettingStoreBase<T extends Record<string, any>> {
 	 */
 	async updateSetting<K extends keyof T>(key: K, value: T[K]): Promise<void> {
 		const oldSettings = { ...this.settings };
+		const oldValue = this.settings[key];
 		const normalizer = this.settingValueNormalizers.get(key);
 		if (normalizer) {
 			value = normalizer.normalize(value) as T[K];
@@ -166,7 +167,11 @@ export abstract class SettingStoreBase<T extends Record<string, any>> {
 		}
 
 		this.settings[key] = value;
-		this.notifyChange(oldSettings, this.settings);
+
+		// Only notify if the value actually changed
+		if (JSON.stringify(oldValue) !== JSON.stringify(value)) {
+			this.notifyChange(oldSettings, this.settings);
+		}
 	}
 
 	/**

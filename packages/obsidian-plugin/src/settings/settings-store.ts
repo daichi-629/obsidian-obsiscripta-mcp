@@ -59,7 +59,7 @@ export class SettingsStore extends SettingStoreBase<MCPPluginSettings> {
 
 		// Normalize auth key list
 		this.settings.mcpApiKeys = Array.isArray(this.settings.mcpApiKeys)
-			? Array.from(new Set(this.settings.mcpApiKeys.filter((key) => typeof key === "string" && key.length > 0)))
+			? Array.from(new Set(this.settings.mcpApiKeys.filter((key) => typeof key === "string" && key.trim().length > 0)))
 			: [];
 
 		// Normalize scriptsPath

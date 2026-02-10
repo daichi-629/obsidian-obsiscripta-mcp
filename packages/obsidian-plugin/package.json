@@ -9,7 +9,11 @@
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"version": "node ../../scripts/sync-version.mjs",
-		"lint": "eslint ."
+		"lint": "eslint .",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"test:ui": "vitest --ui",
+		"test:coverage": "vitest run --coverage"
 	},
 	"keywords": [],
 	"license": "0-BSD",
@@ -24,7 +28,9 @@
 		"jiti": "^2.6.1",
 		"tslib": "^2.8.1",
 		"typescript": "^5.9.3",
-		"typescript-eslint": "^8.54.0"
+		"typescript-eslint": "^8.54.0",
+		"vitest": "^2.1.9",
+		"@vitest/coverage-v8": "^2.1.9"
 	},
 	"dependencies": {
 		"@hono/node-server": "^1.19.9",
@@ -35,5 +41,6 @@
 		"hono": "^4.11.7",
 		"obsidian": "latest",
 		"sucrase": "^3.35.1"
+
 	}
 }
