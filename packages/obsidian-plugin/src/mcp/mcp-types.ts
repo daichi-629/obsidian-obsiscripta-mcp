@@ -2,16 +2,16 @@
  * MCP Standard Protocol Types (Streamable HTTP Transport)
  * Based on MCP specification 2025-03-26
  *
- * Imports types from @modelcontextprotocol/sdk for consistency with the standard.
- * This includes zod as a dependency, but ensures our types stay aligned with
- * the official MCP protocol.
+ * Imports types from @modelcontextprotocol/sdk/spec.types for consistency with
+ * the standard. These are pure TypeScript types generated from the spec and
+ * do NOT include zod runtime dependencies.
  *
  * References:
  * - MCP Spec: https://modelcontextprotocol.io/specification/2025-03-26
  * - SDK: https://github.com/modelcontextprotocol/typescript-sdk
  */
 
-// Import MCP SDK types (runtime dependency via zod is acceptable)
+// Import MCP spec types (pure TypeScript, no runtime dependencies)
 import type {
 	Tool,
 	CallToolResult,
@@ -19,48 +19,34 @@ import type {
 	ImageContent,
 	AudioContent,
 	EmbeddedResource,
-} from "@modelcontextprotocol/sdk/types.js";
+	JSONRPCRequest as SpecJSONRPCRequest,
+	JSONRPCResponse as SpecJSONRPCResponse,
+	JSONRPCResultResponse,
+	JSONRPCErrorResponse,
+	JSONRPCNotification,
+	RequestId,
+	Error as SpecError,
+} from "@modelcontextprotocol/sdk/spec.types.js";
 
-// Re-export SDK types with our naming conventions for consistency
+// Re-export SDK spec types with our naming conventions for consistency
 export type MCPTool = Tool;
 export type MCPTextContent = TextContent;
 export type MCPImageContent = ImageContent;
 export type MCPAudioContent = AudioContent;
 export type MCPResourceContent = EmbeddedResource;
 
-// Content union type
+// Content union type (based on spec ContentBlock types)
 export type MCPContent =
 	| MCPTextContent
 	| MCPImageContent
 	| MCPAudioContent
 	| MCPResourceContent;
 
-// JSON-RPC 2.0 base types (not in SDK, so we define them)
-export interface JSONRPCRequest {
-	jsonrpc: "2.0";
-	id: string | number;
-	method: string;
-	params?: unknown;
-}
-
-export interface JSONRPCResponse {
-	jsonrpc: "2.0";
-	id: string | number;
-	result?: unknown;
-	error?: JSONRPCError;
-}
-
-export interface JSONRPCNotification {
-	jsonrpc: "2.0";
-	method: string;
-	params?: unknown;
-}
-
-export interface JSONRPCError {
-	code: number;
-	message: string;
-	data?: unknown;
-}
+// Re-export JSON-RPC types from spec
+export type JSONRPCRequest = SpecJSONRPCRequest;
+export type JSONRPCResponse = SpecJSONRPCResponse;
+export type JSONRPCError = SpecError;
+export { JSONRPCNotification, RequestId, JSONRPCResultResponse, JSONRPCErrorResponse };
 
 // JSON-RPC Error Codes (standard codes from JSON-RPC 2.0 spec)
 export const JSONRPCErrorCode = {
@@ -71,7 +57,7 @@ export const JSONRPCErrorCode = {
 	InternalError: -32603,
 } as const;
 
-// MCP Tools Protocol Messages (using SDK types where applicable)
+// MCP Tools Protocol Messages (using SDK spec types)
 
 export interface ToolsListRequest extends JSONRPCRequest {
 	method: "tools/list";
@@ -80,7 +66,7 @@ export interface ToolsListRequest extends JSONRPCRequest {
 	};
 }
 
-export interface ToolsListResponse extends JSONRPCResponse {
+export interface ToolsListResponse extends JSONRPCResultResponse {
 	result: {
 		tools: MCPTool[];
 		nextCursor?: string;
@@ -95,7 +81,7 @@ export interface ToolsCallRequest extends JSONRPCRequest {
 	};
 }
 
-export interface ToolsCallResponse extends JSONRPCResponse {
+export interface ToolsCallResponse extends JSONRPCResultResponse {
 	result: CallToolResult;
 }
 
