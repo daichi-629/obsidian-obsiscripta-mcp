@@ -4,3 +4,4 @@ packages:
   - packages/stdio-bridge
   - packages/script-loader-core
   - packages/obsidian-script-loader
+  - packages/integration-tests
