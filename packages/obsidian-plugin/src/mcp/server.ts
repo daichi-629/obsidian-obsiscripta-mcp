@@ -10,7 +10,6 @@ import {
 	createParseErrorResponse,
 	createInvalidRequestResponse,
 } from "./mcp-api";
-import type { JSONRPCRequest } from "./mcp-types";
 
 export class BridgeServer {
 	private static readonly MAX_BODY_BYTES = 1024 * 1024;
@@ -179,7 +178,7 @@ export class BridgeServer {
 			let body: unknown;
 			try {
 				body = await c.req.json();
-			} catch (error) {
+			} catch {
 				const errorResponse = createParseErrorResponse();
 				return c.json(errorResponse, 400);
 			}
@@ -193,7 +192,7 @@ export class BridgeServer {
 				return c.json(errorResponse, 400);
 			}
 
-			const request = parsed as JSONRPCRequest;
+			const request = parsed;
 
 			// Handle the request
 			try {
