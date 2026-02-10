@@ -1,75 +1,75 @@
 # ObsiScripta Bridge
 
-Obsidian の Vault 操作を MCP 経由で扱うための、**Obsidian プラグイン + stdio ブリッジ**のモノレポです。
-スクリプトツールを追加して拡張できることを重視しています。
+ObsiScripta Bridge is a monorepo for an **Obsidian plugin + stdio MCP bridge** that enables MCP-based operations on your vault.
+It is designed to be script-extensible, so you can add your own custom tools with JavaScript/TypeScript.
 
 > [!IMPORTANT]
 >
-> - **Desktop 版 Obsidian 専用**です（モバイル非対応）。
-> - スクリプト拡張は Obsidian API へフルアクセス可能で、サンドボックスはありません。
-> - Bridge Protocol v1 エンドポイントには認証がありません（互換維持のため）。
-> - MCP Standard エンドポイントは API キー認証必須です。
+> - **Desktop Obsidian only** (no mobile support).
+> - Script extensions run with full Obsidian API access and no sandbox.
+> - Bridge Protocol v1 has no authentication (kept for compatibility).
+> - MCP Standard endpoint requires API key authentication.
 
-## できること
+## What you can do
 
-- **MCP Standard HTTP API**（JSON-RPC 2.0）を利用できる
-- 互換維持のための **Bridge Protocol v1 HTTP API** も同時提供
-- ノート操作の組み込みツール（読み取り + 編集系）
-- JavaScript / TypeScript でカスタムツールを追加
-- `mcp-tools/` のスクリプトをホットリロード
+- Use the **MCP Standard HTTP API** (JSON-RPC 2.0)
+- Keep using the legacy **Bridge Protocol v1 HTTP API** for compatibility
+- Run built-in note tools (read + edit operations)
+- Add custom tools in JavaScript / TypeScript
+- Hot-reload tools from `mcp-tools/`
 
-## リポジトリ構成（monorepo）
+## Monorepo layout
 
 - `packages/obsidian-plugin/`
-  Obsidian プラグイン本体（ローカル HTTP サーバーを提供）
+  Obsidian plugin implementation (hosts the local HTTP server)
 - `packages/stdio-bridge/`
-  MCP stdio サーバー（CLI: `obsidian-mcp`）。プラグインの HTTP サーバーへフォワード
+  MCP stdio bridge (`obsidian-mcp` CLI), forwarding requests to the plugin HTTP server
 - `packages/shared/`
-  共有型・プロトコル定義
+  Shared types and protocol interfaces
 - `examples/`
-  スクリプトツールのサンプル
+  Script tool examples
 - `docs/`
-  プロトコル仕様・リリース手順など
+  Protocol and release documentation
 
-## アーキテクチャ概要
+## Architecture overview
 
-1. Obsidian プラグインがローカル HTTP サーバーを起動
-2. stdio bridge が MCP クライアント（Claude Desktop など）と接続
-3. stdio bridge からプラグインへ HTTP で中継
-4. ツール実行時に組み込みツール / script tools を呼び出し
+1. The Obsidian plugin starts a local HTTP server.
+2. The stdio bridge connects to MCP clients (for example, Claude Desktop).
+3. The stdio bridge forwards requests to the plugin via HTTP.
+4. Tool execution is handled by built-in tools and/or script tools.
 
-stdio bridge の通信モードは次の 3 つです。
+The stdio bridge supports three transport modes:
 
-- `auto`（既定）: MCP Standard を優先し、必要なら v1 へフォールバック
-- `mcp`: MCP Standard のみ
-- `v1`: Bridge Protocol v1 のみ
+- `auto` (default): prefer MCP Standard, then fall back to Bridge v1
+- `mcp`: MCP Standard only
+- `v1`: Bridge Protocol v1 only
 
-## セットアップ
+## Setup
 
-### 前提
+### Prerequisites
 
-- Node.js（LTS 推奨）
-- `pnpm`（このリポジトリは pnpm workspace）
+- Node.js (LTS recommended)
+- `pnpm` (this repository uses pnpm workspace)
 - Obsidian Desktop
 
-### 開発起動
+### Development
 
 ```bash
 pnpm install
 pnpm run dev
 ```
 
-その後、Obsidian をリロードし、**Settings → Community plugins** でプラグインを有効化してください。
+Then reload Obsidian and enable the plugin in **Settings → Community plugins**.
 
-### ビルド
+### Build
 
 ```bash
 pnpm run build
 ```
 
-## よく使うコマンド
+## Common commands
 
-### ルート（全パッケージ横断）
+### Root (across packages)
 
 ```bash
 pnpm run dev
@@ -79,7 +79,7 @@ pnpm run test
 pnpm run test:integration
 ```
 
-### パッケージ単位
+### Per package
 
 ```bash
 pnpm --filter obsiscripta-bridge-plugin run dev
@@ -93,11 +93,11 @@ pnpm --filter obsidian-mcp-bridge run build:binary
 pnpm --filter @obsiscripta/shared run build
 ```
 
-## インストール
+## Installation
 
-### 手動インストール
+### Manual install
 
-以下を vault 側のプラグインフォルダへ配置します。
+Copy the following files into your vault plugin directory:
 
 ```text
 <Vault>/.obsidian/plugins/obsidian-mcp/
@@ -106,37 +106,37 @@ pnpm --filter @obsiscripta/shared run build
   styles.css
 ```
 
-### BRAT 経由
+### Install via BRAT
 
-1. **BRAT** をインストールして有効化
-2. **Settings → BRAT → Add Beta plugin** を選択
-3. リポジトリ URL（例: `https://github.com/daichi-629/obsidian-obsiscripta-mcp`）を入力
-4. **Settings → Community plugins** から **ObsiScripta Bridge** を有効化
+1. Install and enable **BRAT**.
+2. Open **Settings → BRAT → Add Beta plugin**.
+3. Enter this repository URL (example: `https://github.com/daichi-629/obsidian-obsiscripta-mcp`).
+4. Go back to **Settings → Community plugins** and enable **ObsiScripta Bridge**.
 
-## エンドポイント仕様
+## Endpoints
 
-プラグインは次の 2 系統を同時に公開します。
+The plugin exposes both protocols at the same time:
 
-1. **MCP Standard HTTP（推奨）**
+1. **MCP Standard HTTP** (recommended)
    `http://127.0.0.1:3000/mcp`
     - JSON-RPC 2.0
     - MCP specification 2025-03-26
-    - API キー必須（`X-ObsiScripta-Api-Key` または `Authorization: Bearer ...`）
+    - API key required (`X-ObsiScripta-Api-Key` or `Authorization: Bearer ...`)
 
-2. **Bridge Protocol v1（互換用）**
+2. **Bridge Protocol v1** (legacy compatibility)
    `http://127.0.0.1:3000/bridge/v1`
-    - 旧来の独自 HTTP API
-    - v1 互換維持のため認証なし
+    - Custom legacy HTTP API
+    - No authentication (for v1 compatibility)
 
-詳細は [docs/protocol.md](docs/protocol.md) を参照してください。
+See [docs/protocol.md](docs/protocol.md) for details.
 
-## Claude Desktop 連携（stdio bridge）
+## Claude Desktop configuration (stdio bridge)
 
-1. Obsidian の **Settings → Community plugins → ObsiScripta Bridge** を開く
-2. **Connection info** でホストとポートを確認（例: `127.0.0.1:3000`）
-3. プラグイン設定で MCP API キーを発行
-4. GitHub Releases から OS 向け `obsidian-mcp` バイナリを取得
-5. Claude Desktop の MCP 設定へ追加
+1. Open **Settings → Community plugins → ObsiScripta Bridge** in Obsidian.
+2. Confirm host/port in **Connection info** (example: `127.0.0.1:3000`).
+3. Create an MCP API key in plugin settings.
+4. Download the `obsidian-mcp` binary for your OS from GitHub Releases.
+5. Add the server entry to your Claude Desktop MCP config:
 
 ```json
 {
@@ -154,21 +154,21 @@ pnpm --filter @obsiscripta/shared run build
 }
 ```
 
-ポート変更後はプラグインで **Restart server** を実行し、`OBSIDIAN_MCP_PORT` も合わせて更新してください。
+If you change the port, run **Restart server** in the plugin and update `OBSIDIAN_MCP_PORT` accordingly.
 
 ## Script tools
 
-既定では vault ルート配下の `mcp-tools/` を監視します（設定で変更可能）。
+By default, script tools are loaded from `mcp-tools/` at your vault root (configurable in settings):
 
 ```text
 mcp-tools/
 ```
 
-最小例:
+Minimal example:
 
 ```js
 export default {
-	// ツール名はファイルパスから自動決定されます。
+	// Tool name is derived from file path.
 	// mcp-tools/example_tool.js -> example_tool
 	// mcp-tools/utils/helper.js -> utils/helper
 	description: "Example custom tool",
@@ -188,31 +188,31 @@ export default {
 };
 ```
 
-補足:
+Notes:
 
-- 相対 import はスクリプトファイル基準で解決されます
-- Dataview が有効なら `dv` API を利用可能
-- Templater が有効なら `tp` API を利用可能
-- Omnisearch が有効ならグローバル `omnisearch` API を利用可能
+- Relative imports resolve from the script file location.
+- If Dataview is installed, `dv` (Dataview API) is available.
+- If Templater is installed, `tp` (Templater API) is available.
+- If Omnisearch is installed, the global `omnisearch` API is available.
 
-サンプルは以下を参照:
+Examples:
 
 - `examples/dataview-example.js`
 - `examples/templater-example.js`
 - `examples/omnisearch-example.js`
 
-## テスト
+## Testing
 
 ```bash
 pnpm run test
 pnpm run test:integration
 ```
 
-統合テストは `packages/integration-tests` に集約されています。
+Integration tests are organized under `packages/integration-tests`.
 
-## バージョン管理
+## Versioning
 
-モノレポ内のバージョン同期はルートスクリプトを使ってください。
+Use root scripts to keep versions synchronized in this monorepo:
 
 ```bash
 pnpm run version:patch
@@ -221,11 +221,11 @@ pnpm run version:major
 pnpm run version:bump <x.y.z>
 ```
 
-## リリース
+## Release
 
-GitHub Actions を利用した配布手順は [docs/release.md](docs/release.md) を参照してください。
+For the GitHub Actions release workflow and expected assets, see [docs/release.md](docs/release.md).
 
-## 参考リンク
+## References
 
 - Obsidian API docs: https://docs.obsidian.md
 - Releases: https://github.com/daichi-629/obsidian-obsiscripta-mcp/releases
