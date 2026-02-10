@@ -37,6 +37,7 @@
 		"@modelcontextprotocol/sdk": "^1.25.3",
 		"@obsiscripta/obsidian-script-loader": "workspace:*",
 		"@obsiscripta/shared": "workspace:*",
+		"diff": "^8.0.3",
 		"diff-match-patch": "^1.0.5",
 		"hono": "^4.11.7",
 		"obsidian": "latest",
