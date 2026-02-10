@@ -138,7 +138,9 @@ export class PluginClient {
 			"callTool",
 			() => this.mcpCallTool(toolName, args),
 			() => this.v1CallTool(toolName, args),
-			{ allowFallback: false }
+			{
+				shouldFallback: (error) => this.isCallToolFallbackSafe(error),
+			}
 		);
 	}
 
@@ -173,9 +175,9 @@ export class PluginClient {
 		operation: string,
 		mcpOperation: () => Promise<T>,
 		v1Operation: () => Promise<T>,
-		options: { allowFallback?: boolean } = {}
+		options: { shouldFallback?: (error: unknown) => boolean } = {}
 	): Promise<T> {
-		const allowFallback = options.allowFallback ?? true;
+		const shouldFallback = options.shouldFallback ?? (() => true);
 
 		if (!this.shouldUseMcpFirst()) {
 			return v1Operation();
@@ -184,12 +186,24 @@ export class PluginClient {
 		try {
 			return await mcpOperation();
 		} catch (error) {
-			if (!allowFallback || !this.canFallbackToV1()) {
+			if (!this.canFallbackToV1() || !shouldFallback(error)) {
 				throw error;
 			}
 			this.logFallback(operation, error);
 			return v1Operation();
 		}
+	}
+
+	private isCallToolFallbackSafe(error: unknown): boolean {
+		if (!(error instanceof PluginClientError)) {
+			return false;
+		}
+
+		if (error.errorCode === "MCP_METHOD_NOT_FOUND") {
+			return true;
+		}
+
+		return error.statusCode === 404 || error.statusCode === 405 || error.statusCode === 501;
 	}
 
 	private async mcpHealth(): Promise<HealthResponse> {
@@ -385,11 +399,12 @@ export class PluginClient {
 		);
 		if ("error" in response) {
 			const error = (response as JSONRPCErrorResponse).error;
+			const mcpErrorCode = error.code === -32601 ? "MCP_METHOD_NOT_FOUND" : "MCP_ERROR";
 			throw new PluginClientError(
 				`MCP error ${error.code}: ${error.message}`,
 				502,
-				"MCP_ERROR",
-				error.data
+				mcpErrorCode,
+				{ mcpError: error, data: error.data }
 			);
 		}
 		if (!("result" in response)) {
