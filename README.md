@@ -60,7 +60,7 @@ The bridge server exposes two protocol endpoints simultaneously:
 2. **Bridge Protocol v1** (Legacy): `http://127.0.0.1:3000/bridge/v1`
    - Custom HTTP API
    - Maintained for backward compatibility
-   - Used by the stdio bridge
+   - Used by the stdio bridge as a fallback transport
 
 See [docs/protocol.md](docs/protocol.md) for detailed protocol specifications.
 
@@ -89,8 +89,17 @@ See [docs/protocol.md](docs/protocol.md) for detailed protocol specifications.
 
 If you change the port, run **Restart server** and update `OBSIDIAN_MCP_PORT` to match.
 
-**Note**: The stdio bridge currently uses the v1 API endpoint. Migration to the MCP
-standard endpoint is planned for Phase 2.
+**stdio bridge transport mode**
+
+The stdio bridge now prefers the MCP Standard endpoint and automatically falls back to
+Bridge v1 if needed.
+
+Optional environment variable:
+
+- `OBSIDIAN_MCP_TRANSPORT=auto|mcp|v1`
+  - `auto` (default): MCP Standard first, then Bridge v1 fallback
+  - `mcp`: MCP Standard only (no fallback)
+  - `v1`: Bridge v1 only
 
 ## Script tools
 

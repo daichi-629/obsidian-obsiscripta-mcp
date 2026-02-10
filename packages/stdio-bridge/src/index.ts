@@ -5,9 +5,27 @@
 import { resolve as resolvePath } from "node:path";
 import { StdioBridgeServer } from "./bridge-server.js";
 import { PluginClient, PluginClientError, RetryExhaustedError } from "./plugin-client.js";
+import type { TransportMode } from "./types.js";
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 3000;
+const DEFAULT_TRANSPORT_MODE: TransportMode = "auto";
+
+function resolveTransportMode(): TransportMode {
+	const mode = process.env.OBSIDIAN_MCP_TRANSPORT?.trim().toLowerCase();
+	if (!mode) {
+		return DEFAULT_TRANSPORT_MODE;
+	}
+
+	if (mode === "auto" || mode === "mcp" || mode === "v1") {
+		return mode;
+	}
+
+	console.error(
+		`[stdio-bridge] Invalid OBSIDIAN_MCP_TRANSPORT "${mode}", using ${DEFAULT_TRANSPORT_MODE}`
+	);
+	return DEFAULT_TRANSPORT_MODE;
+}
 
 function resolveBridgeConfig() {
 	const host = process.env.OBSIDIAN_MCP_HOST?.trim() || DEFAULT_HOST;
@@ -26,7 +44,13 @@ function resolveBridgeConfig() {
 
 async function runCli() {
 	const { host, port } = resolveBridgeConfig();
-	const pluginClient = new PluginClient({ host, port, timeout: 5000 });
+	const transportMode = resolveTransportMode();
+	const pluginClient = new PluginClient({
+		host,
+		port,
+		timeout: 5000,
+		transportMode,
+	});
 	const server = new StdioBridgeServer(pluginClient);
 
 	try {
@@ -55,4 +79,5 @@ export type {
 	PluginClientConfig,
 	MCPToolDefinition,
 	PollingState,
+	TransportMode,
 } from "./types.js";
