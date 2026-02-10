@@ -156,15 +156,15 @@ export class MCPSettingTab extends PluginSettingTab {
 				}),
 			);
 
-		new Setting(containerEl).setName("MCP authentication").setHeading();
+		new Setting(containerEl).setName("Mcp authentication").setHeading();
 
 		containerEl.createEl("p", {
-			text: "MCP Standard (/mcp) requires an API key. Bridge v1 (/bridge/v1) remains unauthenticated for v1 compatibility.",
+			text: "Mcp standard (/mcp) requires an API key. Bridge v1 (/bridge/v1) remains unauthenticated for v1 compatibility.",
 			cls: "setting-item-description",
 		});
 
 		new Setting(containerEl)
-			.setName("Issue API key")
+			.setName("Issue an API key")
 			.setDesc("Generate a new key for stdio bridge. Save the key securely; it is not recoverable if lost.")
 			.addButton((button) =>
 				button.setButtonText("Generate").onClick(async () => {
@@ -172,10 +172,10 @@ export class MCPSettingTab extends PluginSettingTab {
 					navigator.clipboard
 						.writeText(issuedKey)
 						.then(() => {
-							new Notice("New MCP API key issued and copied to clipboard");
+							new Notice("A new mcp API key was issued and copied to clipboard");
 						})
 						.catch(() => {
-							new Notice(`New MCP API key issued: ${issuedKey}`);
+							new Notice(`A new mcp API key was issued: ${issuedKey}`);
 						});
 					this.display();
 				}),
@@ -184,14 +184,14 @@ export class MCPSettingTab extends PluginSettingTab {
 		const mcpApiKeys = this.settingsStore.getMcpApiKeys();
 		if (mcpApiKeys.length === 0) {
 			containerEl.createEl("p", {
-				text: "No MCP API keys issued yet. /mcp requests are rejected until a key is created.",
+				text: "No mcp API keys have been issued yet. /mcp requests are rejected until a key is created.",
 				cls: "setting-item-description",
 			});
 		} else {
 			for (const apiKey of mcpApiKeys) {
 				new Setting(containerEl)
 					.setName(this.maskApiKey(apiKey))
-					.setDesc("Use as OBSIDIAN_MCP_API_KEY in stdio bridge")
+					.setDesc("Use this value as the API key environment variable in the stdio bridge")
 					.addButton((button) =>
 						button.setButtonText("Revoke").setWarning().onClick(async () => {
 							await this.settingsStore.revokeMcpApiKey(apiKey);

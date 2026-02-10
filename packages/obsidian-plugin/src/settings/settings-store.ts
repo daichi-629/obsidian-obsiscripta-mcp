@@ -1,5 +1,4 @@
 import { Notice, Plugin } from "obsidian";
-import { randomBytes } from "node:crypto";
 import { MCPPluginSettings, DEFAULT_SETTINGS } from "./types";
 import { ScriptLoader } from "@obsiscripta/obsidian-script-loader";
 import { ToolingManager } from "../plugin/tooling-manager";
@@ -106,12 +105,24 @@ export class SettingsStore {
 		this.bridgeController?.updateSettings({ bindHost: value });
 	}
 
+
+	private generateMcpApiKey(): string {
+		const bytes = new Uint8Array(24);
+		crypto.getRandomValues(bytes);
+		let binary = "";
+		for (const b of bytes) {
+			binary += String.fromCharCode(b);
+		}
+		const encoded = btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+		return `obsi_${encoded}`;
+	}
+
 	getMcpApiKeys(): readonly string[] {
 		return this.settings.mcpApiKeys;
 	}
 
 	async issueMcpApiKey(): Promise<string> {
-		const key = `obsi_${randomBytes(24).toString("base64url")}`;
+		const key = this.generateMcpApiKey();
 		this.settings.mcpApiKeys = [...this.settings.mcpApiKeys, key];
 		await this.save();
 		this.bridgeController?.updateSettings({ mcpApiKeys: this.settings.mcpApiKeys });
