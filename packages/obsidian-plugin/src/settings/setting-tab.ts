@@ -1,24 +1,49 @@
-import { App, PluginSettingTab, Plugin, Setting } from "obsidian";
+import { App, Notice, PluginSettingTab, Plugin, Setting } from "obsidian";
 import { SettingsStore } from "./settings-store";
 import { ToolSource } from "../mcp/tools/registry";
 import { ExampleManager } from "../mcp/tools/scripting/example-manager";
+import { BridgeController } from "../plugin/bridge-controller";
+import { ToolingManager } from "../plugin/tooling-manager";
+import { EventRef } from "./setting-store-base";
 
 const TIMER_DELAY = 2000;
 
 export class MCPSettingTab extends PluginSettingTab {
 	private settingsStore: SettingsStore;
+	private bridgeController: BridgeController;
+	private toolingManager: ToolingManager;
 	private exampleManager: ExampleManager | null;
 	private displayTimer: number | null = null;
+	private changeEventRef: EventRef | null = null;
 
 	constructor(
 		app: App,
 		plugin: Plugin,
 		settingsStore: SettingsStore,
+		bridgeController: BridgeController,
+		toolingManager: ToolingManager,
 		exampleManager: ExampleManager | null,
 	) {
 		super(app, plugin);
 		this.settingsStore = settingsStore;
+		this.bridgeController = bridgeController;
+		this.toolingManager = toolingManager;
 		this.exampleManager = exampleManager;
+
+		// Subscribe to settings changes for automatic UI updates
+		this.changeEventRef = this.settingsStore.on("change", () => {
+			this.scheduleDisplay();
+		});
+	}
+
+	/**
+	 * Clean up event listeners when the tab is hidden/closed.
+	 */
+	hide(): void {
+		if (this.changeEventRef) {
+			this.changeEventRef.unsubscribe();
+			this.changeEventRef = null;
+		}
 	}
 
 	/**
@@ -32,6 +57,13 @@ export class MCPSettingTab extends PluginSettingTab {
 			this.display();
 			this.displayTimer = null;
 		}, TIMER_DELAY);
+	}
+
+	private maskApiKey(apiKey: string): string {
+		if (apiKey.length <= 8) {
+			return "*".repeat(apiKey.length);
+		}
+		return `${apiKey.slice(0, 4)}…${apiKey.slice(-4)}`;
 	}
 
 	display(): void {
@@ -52,8 +84,8 @@ export class MCPSettingTab extends PluginSettingTab {
 			cls: "mcp-settings-warning-title",
 		});
 		const bindWarningText = settings.bindHost === "0.0.0.0"
-			? "Warning: the server binds to all network interfaces (0.0.0.0). It is accessible from other devices on your network. No authentication is required."
-			: "Warning: the server binds to localhost only (127.0.0.1). No authentication is required.";
+			? "Warning: the server binds to all network interfaces (0.0.0.0). It is accessible from other devices on your network."
+			: "Warning: the server binds to localhost only (127.0.0.1).";
 		warningEl.createEl("p", {
 			text: bindWarningText,
 			cls: "mcp-settings-warning-body",
@@ -65,10 +97,11 @@ export class MCPSettingTab extends PluginSettingTab {
 			.setDesc("");
 
 		const updateServerStatus = () => {
-			const isRunning = this.settingsStore.isServerRunning();
-			const needsRestart = this.settingsStore.needsRestart();
-			const runningPort = this.settingsStore.getRunningServerPort();
-			const runningBindHost = this.settingsStore.getRunningServerBindHost();
+			const isRunning = this.bridgeController.isRunning();
+			const needsRestart = this.bridgeController.needsRestart();
+			const runningSettings = this.bridgeController.getRunningSettings();
+			const runningPort = runningSettings?.port ?? null;
+			const runningBindHost = runningSettings?.bindHost ?? null;
 
 			let statusText = isRunning
 				? `🟢 Running on ${runningBindHost ?? settings.bindHost}:${runningPort ?? settings.port}`
@@ -89,7 +122,7 @@ export class MCPSettingTab extends PluginSettingTab {
 				toggle
 					.setValue(settings.autoStart)
 					.onChange(async (value) => {
-						await this.settingsStore.updateAutoStart(value);
+						await this.settingsStore.updateSetting("autoStart", value);
 					}),
 			);
 
@@ -102,8 +135,19 @@ export class MCPSettingTab extends PluginSettingTab {
 					.addOption("0.0.0.0", "0.0.0.0 (all interfaces)")
 					.setValue(settings.bindHost)
 					.onChange(async (value) => {
-						await this.settingsStore.updateBindHost(value);
-						this.scheduleDisplay();
+						await this.settingsStore.updateSetting("bindHost", value);
+					}),
+			);
+
+
+		new Setting(containerEl)
+			.setName("Enable bridge v1 API")
+			.setDesc("Expose legacy unauthenticated endpoints under /bridge/v1 (requires restart)")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(settings.enableBridgeV1)
+					.onChange(async (value) => {
+						await this.settingsStore.updateSetting("enableBridgeV1", value);
 					}),
 			);
 
@@ -117,8 +161,7 @@ export class MCPSettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						const port = parseInt(value, 10);
 						if (!isNaN(port) && port > 0 && port < 65536) {
-							await this.settingsStore.updatePort(port);
-							this.scheduleDisplay();
+							await this.settingsStore.updateSetting("port", port);
 						}
 					}),
 			);
@@ -130,7 +173,7 @@ export class MCPSettingTab extends PluginSettingTab {
 				button
 					.setButtonText("Start")
 					.onClick(async () => {
-						await this.settingsStore.startServer();
+						await this.bridgeController.start();
 						updateServerStatus();
 					}),
 			)
@@ -138,16 +181,63 @@ export class MCPSettingTab extends PluginSettingTab {
 				button
 					.setButtonText("Stop")
 					.onClick(async () => {
-						await this.settingsStore.stopServer();
+						await this.bridgeController.stop();
 						updateServerStatus();
 					}),
 			)
 			.addButton((button) =>
 				button.setButtonText("Restart").onClick(async () => {
-					await this.settingsStore.restartServer();
+					await this.bridgeController.restart();
 					updateServerStatus();
 				}),
 			);
+
+		new Setting(containerEl).setName("Mcp authentication").setHeading();
+
+		containerEl.createEl("p", {
+			text: settings.enableBridgeV1
+				? "Mcp standard (/mcp) requires an API key. Bridge v1 (/bridge/v1) is enabled and remains unauthenticated for compatibility."
+				: "Mcp standard (/mcp) requires an API key. Bridge v1 (/bridge/v1) is currently disabled.",
+			cls: "setting-item-description",
+		});
+
+		new Setting(containerEl)
+			.setName("Issue an API key")
+			.setDesc("Generate a new key for stdio bridge. Save the key securely; it is not recoverable if lost.")
+			.addButton((button) =>
+				button.setButtonText("Generate").onClick(async () => {
+					const issuedKey = await this.settingsStore.issueMcpApiKey();
+					navigator.clipboard
+						.writeText(issuedKey)
+						.then(() => {
+							new Notice("A new mcp API key was issued and copied to clipboard");
+						})
+						.catch(() => {
+							new Notice(`A new mcp API key was issued: ${issuedKey}`);
+						});
+					this.display();
+				}),
+			);
+
+		const mcpApiKeys = this.settingsStore.getMcpApiKeys();
+		if (mcpApiKeys.length === 0) {
+			containerEl.createEl("p", {
+				text: "No mcp API keys have been issued yet. /mcp requests are rejected until a key is created.",
+				cls: "setting-item-description",
+			});
+		} else {
+			for (const apiKey of mcpApiKeys) {
+				new Setting(containerEl)
+					.setName(this.maskApiKey(apiKey))
+					.setDesc("Use this value as the API key environment variable in the stdio bridge")
+					.addButton((button) =>
+						button.setButtonText("Revoke").setWarning().onClick(async () => {
+							await this.settingsStore.revokeMcpApiKey(apiKey);
+							this.display();
+						}),
+					);
+			}
+		}
 
 		new Setting(containerEl).setName("Script tools").setHeading();
 
@@ -161,7 +251,7 @@ export class MCPSettingTab extends PluginSettingTab {
 					.setPlaceholder("Script tools (mcp-tools)")
 					.setValue(settings.scriptsPath)
 					.onChange(async (value) => {
-						await this.settingsStore.updateScriptsPath(value);
+						await this.settingsStore.updateSetting("scriptsPath", value);
 						this.scheduleDisplay();
 					}),
 			);
@@ -171,7 +261,13 @@ export class MCPSettingTab extends PluginSettingTab {
 			.setDesc("Reload all scripts from the configured folder")
 			.addButton((button) =>
 				button.setButtonText("Reload").onClick(async () => {
-					await this.settingsStore.reloadScripts();
+					try {
+						await this.toolingManager.reloadScripts();
+						new Notice("Scripts reloaded");
+					} catch (error) {
+						console.error("[Bridge] Failed to reload scripts:", error);
+						new Notice("Failed to reload scripts");
+					}
 					this.display();
 				}),
 			);
@@ -193,7 +289,7 @@ export class MCPSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl).setName("Tools").setHeading();
 
-		const tools = this.settingsStore.getRegisteredTools().sort((a, b) =>
+		const tools = this.toolingManager.getRegisteredTools().sort((a, b) =>
 			a.name.localeCompare(b.name),
 		);
 
@@ -206,13 +302,13 @@ export class MCPSettingTab extends PluginSettingTab {
 		}
 
 		const builtinTools = tools.filter(
-			(tool) => this.settingsStore.getToolSource(tool.name) === ToolSource.Builtin,
+			(tool) => this.toolingManager.getToolSource(tool.name) === ToolSource.Builtin,
 		);
 		const scriptTools = tools.filter(
-			(tool) => this.settingsStore.getToolSource(tool.name) === ToolSource.Script,
+			(tool) => this.toolingManager.getToolSource(tool.name) === ToolSource.Script,
 		);
 		const unknownTools = tools.filter(
-			(tool) => this.settingsStore.getToolSource(tool.name) === ToolSource.Unknown,
+			(tool) => this.toolingManager.getToolSource(tool.name) === ToolSource.Unknown,
 		);
 
 		const renderToolToggle = (toolName: string, description: string) => {
@@ -220,9 +316,10 @@ export class MCPSettingTab extends PluginSettingTab {
 				.setName(toolName)
 				.setDesc(description)
 				.addToggle((toggle) => {
-					toggle.setValue(this.settingsStore.isToolEnabled(toolName));
+					toggle.setValue(this.toolingManager.isToolEnabled(toolName));
 					toggle.onChange(async (value) => {
 						await this.settingsStore.setToolEnabled(toolName, value);
+						// ToolingManager is automatically updated via settingsStore.on("change")
 					});
 				});
 		};

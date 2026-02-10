@@ -11,11 +11,14 @@
 		"lint": "pnpm -r lint",
 		"plugin": "pnpm --filter obsiscripta-bridge-plugin",
 		"bridge": "pnpm --filter obsidian-mcp-bridge",
+		"remote": "pnpm --filter @obsiscripta/remote-mcp-server",
 		"version": "node scripts/sync-version.mjs",
 		"version:sync": "node scripts/sync-version.mjs",
 		"version:patch": "node scripts/bump-version.mjs patch",
 		"version:minor": "node scripts/bump-version.mjs minor",
-		"version:major": "node scripts/bump-version.mjs major"
+		"version:major": "node scripts/bump-version.mjs major",
+		"test": "pnpm -r --if-present test",
+		"test:integration": "pnpm --filter @obsiscripta/integration-tests run test"
 	},
 	"keywords": [],
 	"license": "0-BSD"

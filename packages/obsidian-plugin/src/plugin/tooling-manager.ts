@@ -1,4 +1,4 @@
-import { App, Vault } from "obsidian";
+import { App, Notice, Vault } from "obsidian";
 import type MCPPlugin from "../main";
 import { MCPPluginSettings } from "../settings";
 import { MCPToolDefinition } from "../mcp/tools/types";
@@ -10,9 +10,11 @@ import {
 	ScriptRegistry,
 } from "@obsiscripta/obsidian-script-loader";
 import { createObsidianContextConfig } from "../mcp/tools/scripting/context-config";
-import { validateAndConvertScriptExports } from "../mcp/tools/scripting/script-validator";
+import { isToolDefinitionLike, validateAndConvertScriptExports } from "../mcp/tools/scripting/script-validator";
 import { ExampleManager } from "../mcp/tools/scripting/example-manager";
 import { EventRegistrar, ScriptExecutionContext } from "./context";
+import { SettingsStore } from "../settings/settings-store";
+import { EventRef } from "../settings/setting-store-base";
 
 // Coordinates built-in and script tool lifecycle + registry state.
 export class ToolingManager {
@@ -26,6 +28,7 @@ export class ToolingManager {
 	private scriptRegistry: ScriptRegistry | null = null;
 	private scriptLoader: ScriptLoader | null = null;
 	private exampleManager: ExampleManager | null = null;
+	private changeEventRef: EventRef | null = null;
 
 	constructor(
 		vault: Vault,
@@ -69,6 +72,11 @@ export class ToolingManager {
 			scriptsPath,
 			{
 				onScriptLoaded: (metadata, exports) => {
+					if (!isToolDefinitionLike(exports)) {
+						console.debug(`[Bridge] Ignoring non-tool script file: ${metadata.path}`);
+						return;
+					}
+
 					try {
 						// Validate and convert script exports to MCP tool definition
 						const tool = validateAndConvertScriptExports(exports, metadata.path, metadata.name);
@@ -147,5 +155,55 @@ export class ToolingManager {
 			throw new Error("Script loader is not available");
 		}
 		await this.scriptLoader.reloadScripts();
+	}
+
+	/**
+	 * Subscribe to settings changes to automatically update tool configuration.
+	 * This keeps the tooling manager in sync with the settings store.
+	 */
+	subscribeToSettings(settingsStore: SettingsStore): void {
+		this.changeEventRef = settingsStore.on("change", (oldSettings, newSettings) => {
+			void (async () => {
+				// Update scriptsPath if changed
+				if (oldSettings.scriptsPath !== newSettings.scriptsPath) {
+					try {
+						await this.updateScriptsPath(newSettings.scriptsPath);
+						console.debug(`[Bridge] Scripts path updated to: ${newSettings.scriptsPath}`);
+					} catch (error) {
+						console.error("[Bridge] Failed to update scripts path:", error);
+						new Notice("Failed to update scripts folder");
+					}
+				}
+
+				// Update tool enabled/disabled state if disabledTools changed
+				const oldDisabled = new Set(oldSettings.disabledTools);
+				const newDisabled = new Set(newSettings.disabledTools);
+
+				// Tools newly disabled
+				for (const tool of newDisabled) {
+					if (!oldDisabled.has(tool)) {
+						this.setToolEnabled(tool, false);
+					}
+				}
+
+				// Tools newly enabled
+				for (const tool of oldDisabled) {
+					if (!newDisabled.has(tool)) {
+						this.setToolEnabled(tool, true);
+					}
+				}
+			})();
+		});
+	}
+
+	/**
+	 * Unsubscribe from settings changes.
+	 * Should be called when the manager is being destroyed.
+	 */
+	unsubscribe(): void {
+		if (this.changeEventRef) {
+			this.changeEventRef.unsubscribe();
+			this.changeEventRef = null;
+		}
 	}
 }

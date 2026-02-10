@@ -19,8 +19,11 @@ export default class MCPPlugin extends Plugin {
 			return;
 		}
 
-		// Initialize settings store and load settings
-		this.settingsStore = new SettingsStore(this);
+		// Initialize settings store with Obsidian persistence layer
+		this.settingsStore = new SettingsStore({
+			load: async () => (await this.loadData()) as Partial<MCPPluginSettings>,
+			save: async (settings) => await this.saveData(settings),
+		});
 		await this.settingsStore.load();
 		this.settings = this.settingsStore.getSettings() as MCPPluginSettings;
 
@@ -45,16 +48,16 @@ export default class MCPPlugin extends Plugin {
 				autoStart: this.settings.autoStart,
 				port: this.settings.port,
 				bindHost: this.settings.bindHost,
+				enableBridgeV1: this.settings.enableBridgeV1,
+				mcpApiKeys: [...this.settings.mcpApiKeys],
 			},
 			this.toolingManager.registry,
 		);
 		await this.bridgeController.startIfEnabled();
 
-		// Inject services into settings store
-		this.settingsStore.setServices(
-			this.toolingManager,
-			this.bridgeController,
-		);
+		// Subscribe components to settings changes
+		this.bridgeController.subscribeToSettings(this.settingsStore);
+		this.toolingManager.subscribeToSettings(this.settingsStore);
 
 		// Add settings tab with dependency injection
 		this.addSettingTab(
@@ -62,6 +65,8 @@ export default class MCPPlugin extends Plugin {
 				this.app,
 				this,
 				this.settingsStore,
+				this.bridgeController,
+				this.toolingManager,
 				this.toolingManager.getExampleManager(),
 			),
 		);
@@ -80,7 +85,7 @@ export default class MCPPlugin extends Plugin {
 			id: "restart-server",
 			name: "Restart server",
 			callback: () => {
-				void this.settingsStore.restartServer();
+				void this.bridgeController.restart();
 			},
 		});
 
@@ -95,9 +100,11 @@ export default class MCPPlugin extends Plugin {
 
 	private async handleUnload(): Promise<void> {
 		if (this.toolingManager) {
+			this.toolingManager.unsubscribe();
 			await this.toolingManager.stop();
 		}
 		if (this.bridgeController) {
+			this.bridgeController.unsubscribe();
 			await this.bridgeController.stop();
 			console.debug("[Bridge] Server stopped on plugin unload");
 		}

@@ -1,50 +1,65 @@
-import { Notice, Plugin } from "obsidian";
 import { MCPPluginSettings, DEFAULT_SETTINGS } from "./types";
 import { ScriptLoader } from "@obsiscripta/obsidian-script-loader";
-import { ToolingManager } from "../plugin/tooling-manager";
-import { BridgeController } from "../plugin/bridge-controller";
-import { MCPToolDefinition } from "../mcp/tools/types";
-import { ToolSource } from "../mcp/tools/registry";
+import { SettingStoreBase } from "./setting-store-base";
 
 /**
- * SettingsStore handles settings persistence and normalization.
- * It wraps loadData/saveData and provides change notifications.
- * It also acts as a facade for the settings UI, delegating to ToolingManager
- * and BridgeController as needed.
+ * Persistence layer interface for settings.
+ * Implementations provide framework-specific storage (e.g., Obsidian Plugin.loadData/saveData).
  */
-export class SettingsStore {
-	private settings: MCPPluginSettings;
-	private plugin: Plugin;
-	private toolingManager?: ToolingManager;
-	private bridgeController?: BridgeController;
+export interface SettingsPersistence {
+	load(): Promise<Partial<MCPPluginSettings>>;
+	save(settings: MCPPluginSettings): Promise<void>;
+}
 
-	constructor(plugin: Plugin) {
-		this.plugin = plugin;
-		this.settings = { ...DEFAULT_SETTINGS };
+/**
+ * SettingsStore handles settings normalization and domain logic.
+ * It is framework-agnostic and uses dependency injection for persistence.
+ * Components can subscribe to setting changes via the event system.
+ */
+export class SettingsStore extends SettingStoreBase<MCPPluginSettings> {
+	private persistence: SettingsPersistence;
+
+	constructor(persistence: SettingsPersistence) {
+		super(DEFAULT_SETTINGS);
+		this.persistence = persistence;
+
+		// Auto-save on setting changes with error handling
+		this.on("change", () => {
+			void (async () => {
+				try {
+					await this.persistence.save(this.settings);
+				} catch (error) {
+					console.error("[SettingsStore] Failed to save settings:", error);
+					// Note: We don't throw here to avoid breaking the event chain
+				}
+			})();
+		});
+
+		// Register normalizers
+		this.registerNormalizer("scriptsPath", {
+			normalize: (value) => ScriptLoader.normalizeScriptsPath(value as string) as MCPPluginSettings[keyof MCPPluginSettings],
+		});
 	}
 
 	/**
-	 * Set service dependencies after initialization.
-	 * Call this after ToolingManager and BridgeController are created.
+	 * Load settings from persistence layer and normalize them.
+	 * Overrides base class to add normalization logic.
 	 */
-	setServices(
-		toolingManager: ToolingManager,
-		bridgeController: BridgeController,
-	): void {
-		this.toolingManager = toolingManager;
-		this.bridgeController = bridgeController;
-	}
+	override async load(data?: Partial<MCPPluginSettings>): Promise<void> {
+		// Load from persistence layer if data not provided
+		const loadedData = data ?? await this.persistence.load();
 
-	/**
-	 * Load settings from disk and normalize them.
-	 */
-	async load(): Promise<void> {
-		const data = (await this.plugin.loadData()) as Partial<MCPPluginSettings>;
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
+		// Call parent load to merge with defaults
+		await super.load(loadedData);
 
 		// Normalize disabledTools array
 		this.settings.disabledTools = Array.isArray(this.settings.disabledTools)
 			? Array.from(new Set(this.settings.disabledTools))
+			: [];
+
+		// Normalize auth key list
+		this.settings.mcpApiKeys = Array.isArray(this.settings.mcpApiKeys)
+			? Array.from(new Set(this.settings.mcpApiKeys.filter((key) => typeof key === "string" && key.trim().length > 0)))
 			: [];
 
 		// Normalize scriptsPath
@@ -52,176 +67,47 @@ export class SettingsStore {
 			this.settings.scriptsPath,
 		);
 		if (normalizedPath !== this.settings.scriptsPath) {
+			const oldSettings = { ...this.settings };
 			this.settings.scriptsPath = normalizedPath;
-			await this.save();
+			// Manually notify change since we're bypassing updateSetting
+			this.notifyChange(oldSettings, this.settings);
 		}
+	}
+
+	private generateMcpApiKey(): string {
+		const bytes = new Uint8Array(24);
+		crypto.getRandomValues(bytes);
+		let binary = "";
+		for (const b of bytes) {
+			binary += String.fromCharCode(b);
+		}
+		const encoded = btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+		return `obsi_${encoded}`;
+	}
+
+	getMcpApiKeys(): readonly string[] {
+		return this.settings.mcpApiKeys;
+	}
+
+	async issueMcpApiKey(): Promise<string> {
+		const key = this.generateMcpApiKey();
+		await this.addToArraySetting("mcpApiKeys", key);
+		return key;
+	}
+
+	async revokeMcpApiKey(key: string): Promise<void> {
+		await this.removeFromArraySetting("mcpApiKeys", key);
 	}
 
 	/**
-	 * Save current settings to disk.
+	 * Enable or disable a tool by updating disabledTools setting.
+	 * ToolingManager is automatically notified via change event.
 	 */
-	async save(): Promise<void> {
-		await this.plugin.saveData(this.settings);
-	}
-
-	/**
-	 * Get current settings (read-only access).
-	 */
-	getSettings(): Readonly<MCPPluginSettings> {
-		return this.settings;
-	}
-
-	/**
-	 * Update a specific setting and save.
-	 */
-	async updateSetting<K extends keyof MCPPluginSettings>(
-		key: K,
-		value: MCPPluginSettings[K],
-	): Promise<void> {
-		this.settings[key] = value;
-		await this.save();
-	}
-
-	async updateAutoStart(value: boolean): Promise<void> {
-		this.settings.autoStart = value;
-		await this.save();
-		this.bridgeController?.updateSettings({ autoStart: value });
-	}
-
-	async updatePort(value: number): Promise<void> {
-		this.settings.port = value;
-		await this.save();
-		this.bridgeController?.updateSettings({ port: value });
-	}
-
-	async updateBindHost(value: string): Promise<void> {
-		this.settings.bindHost = value;
-		await this.save();
-		this.bridgeController?.updateSettings({ bindHost: value });
-	}
-
-	/**
-	 * Add a tool to the disabled list.
-	 */
-	async disableTool(toolName: string): Promise<void> {
-		if (!this.settings.disabledTools.includes(toolName)) {
-			this.settings.disabledTools = [...this.settings.disabledTools, toolName];
-			await this.save();
-		}
-	}
-
-	/**
-	 * Remove a tool from the disabled list.
-	 */
-	async enableTool(toolName: string): Promise<void> {
-		this.settings.disabledTools = this.settings.disabledTools.filter(
-			(name) => name !== toolName,
-		);
-		await this.save();
-	}
-
-	// ========================================================================
-	// SettingTabServices implementation - Facade methods
-	// ========================================================================
-
-	async updateScriptsPath(scriptsPath: string): Promise<void> {
-		if (!this.toolingManager) {
-			throw new Error("ToolingManager not initialized");
-		}
-		try {
-			const normalizedPath =
-				await this.toolingManager.updateScriptsPath(scriptsPath);
-			// Update settings after successful manager update
-			this.settings.scriptsPath = normalizedPath;
-			await this.save();
-		} catch (error) {
-			console.error("[Bridge] Failed to update scripts path:", error);
-			new Notice(
-				"Failed to update scripts folder. Using the default path.",
-			);
-		}
-	}
-
-	async reloadScripts(): Promise<void> {
-		if (!this.toolingManager) {
-			throw new Error("ToolingManager not initialized");
-		}
-		try {
-			await this.toolingManager.reloadScripts();
-			new Notice("Scripts reloaded");
-		} catch (error) {
-			console.error("[Bridge] Failed to reload scripts:", error);
-			new Notice("Failed to reload scripts");
-		}
-	}
-
-	getRegisteredTools(): MCPToolDefinition[] {
-		if (!this.toolingManager) {
-			return [];
-		}
-		return this.toolingManager.getRegisteredTools();
-	}
-
-	isToolEnabled(name: string): boolean {
-		if (!this.toolingManager) {
-			return false;
-		}
-		return this.toolingManager.isToolEnabled(name);
-	}
-
-	getToolSource(name: string): ToolSource {
-		if (!this.toolingManager) {
-			return ToolSource.Unknown;
-		}
-		return this.toolingManager.getToolSource(name);
-	}
-
 	async setToolEnabled(name: string, enabled: boolean): Promise<void> {
-		if (!this.toolingManager) {
-			throw new Error("ToolingManager not initialized");
-		}
-		this.toolingManager.setToolEnabled(name, enabled);
 		if (enabled) {
-			await this.enableTool(name);
+			await this.removeFromArraySetting("disabledTools", name);
 		} else {
-			await this.disableTool(name);
+			await this.addToArraySetting("disabledTools", name);
 		}
-	}
-
-	async restartServer(): Promise<void> {
-		if (!this.bridgeController) {
-			throw new Error("BridgeController not initialized");
-		}
-		await this.bridgeController.restart();
-	}
-
-	isServerRunning(): boolean {
-		return this.bridgeController?.isRunning() ?? false;
-	}
-
-	async startServer(): Promise<void> {
-		if (!this.bridgeController) {
-			throw new Error("BridgeController not initialized");
-		}
-		await this.bridgeController.start();
-	}
-
-	async stopServer(): Promise<void> {
-		if (!this.bridgeController) {
-			throw new Error("BridgeController not initialized");
-		}
-		await this.bridgeController.stop();
-	}
-
-	needsRestart(): boolean {
-		return this.bridgeController?.needsRestart() ?? false;
-	}
-
-	getRunningServerPort(): number | null {
-		return this.bridgeController?.getRunningSettings()?.port ?? null;
-	}
-
-	getRunningServerBindHost(): string | null {
-		return this.bridgeController?.getRunningSettings()?.bindHost ?? null;
 	}
 }
