@@ -4,6 +4,13 @@ import { serve, ServerType } from "@hono/node-server";
 import type { Socket } from "net";
 import { ToolExecutor } from "./tools/executor";
 import { ToolCallRequest } from "./bridge-types";
+import {
+	handleMCPRequest,
+	parseJSONRPCMessage,
+	createParseErrorResponse,
+	createInvalidRequestResponse,
+} from "./mcp-api";
+import type { JSONRPCRequest } from "./mcp-types";
 
 export class BridgeServer {
 	private static readonly MAX_BODY_BYTES = 1024 * 1024;
@@ -31,7 +38,7 @@ export class BridgeServer {
 	private createApp(): Hono {
 		const app = new Hono();
 
-		// CORS middleware
+		// CORS middleware for v1 API
 		app.use(
 			"/bridge/v1/*",
 			cors({
@@ -41,8 +48,36 @@ export class BridgeServer {
 			}),
 		);
 
-		// Body size limit middleware
+		// CORS middleware for MCP standard HTTP
+		app.use(
+			"/mcp",
+			cors({
+				origin: "*",
+				allowMethods: ["GET", "POST", "OPTIONS"],
+				allowHeaders: ["Content-Type", "Mcp-Session-Id"],
+			}),
+		);
+
+		// Body size limit middleware for v1 API
 		app.use("/bridge/v1/*", async (c, next) => {
+			const contentLength = c.req.header("content-length");
+			if (
+				contentLength &&
+				parseInt(contentLength) > BridgeServer.MAX_BODY_BYTES
+			) {
+				return c.json(
+					{
+						error: "Request body too large",
+						message: "Request body too large",
+					},
+					413,
+				);
+			}
+			return await next();
+		});
+
+		// Body size limit middleware for MCP endpoint
+		app.use("/mcp", async (c, next) => {
 			const contentLength = c.req.header("content-length");
 			if (
 				contentLength &&
@@ -138,6 +173,59 @@ export class BridgeServer {
 			}
 		});
 
+		// MCP Standard HTTP endpoint (JSON-RPC over HTTP)
+		app.post("/mcp", async (c) => {
+			// Parse request body
+			let body: unknown;
+			try {
+				body = await c.req.json();
+			} catch (error) {
+				const errorResponse = createParseErrorResponse();
+				return c.json(errorResponse, 400);
+			}
+
+			// Parse JSON-RPC message
+			const parsed = parseJSONRPCMessage(body);
+			if (parsed instanceof Error) {
+				const errorResponse = createInvalidRequestResponse(
+					parsed.message
+				);
+				return c.json(errorResponse, 400);
+			}
+
+			const request = parsed as JSONRPCRequest;
+
+			// Handle the request
+			try {
+				const response = await handleMCPRequest(
+					request,
+					this.executor.getRegistry(),
+					this.executor.getContext()
+				);
+
+				// For Phase 1, we return application/json (no SSE streaming)
+				// Phase 2+ will add SSE support when needed
+				return c.json(response, 200);
+			} catch (error) {
+				console.error("[Bridge] Error handling MCP request:", error);
+				return c.json(
+					{
+						jsonrpc: "2.0",
+						id: request.id,
+						error: {
+							code: -32603,
+							message: "Internal error",
+							data:
+								error instanceof Error
+									? error.message
+									: String(error),
+						},
+					},
+					500
+				);
+			}
+		});
+
 		// 404 handler
 		app.notFound((c) => {
 			return c.json(
@@ -196,7 +284,13 @@ export class BridgeServer {
 					},
 					(info) => {
 						console.debug(
-							`[Bridge] Server started on http://${info.address}:${info.port}/bridge/v1`,
+							`[Bridge] Server started on http://${info.address}:${info.port}`,
+						);
+						console.debug(
+							`[Bridge] - v1 API: http://${info.address}:${info.port}/bridge/v1`,
+						);
+						console.debug(
+							`[Bridge] - MCP Standard: http://${info.address}:${info.port}/mcp`,
 						);
 						if (!settled) {
 							settled = true;

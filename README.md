@@ -9,10 +9,11 @@ Important notes:
 
 ## Features
 
-- Bridge Protocol v1 HTTP API for local AI clients.
-- Built-in note tools (read now, more CRUD tools planned).
-- Script extension system for custom tools (JavaScript/TypeScript).
-- Hot-reload for scripts in the vault-root `mcp-tools/` folder (configurable in settings).
+- **MCP Standard HTTP API** (JSON-RPC 2.0) for interoperability with MCP clients
+- Bridge Protocol v1 HTTP API for local AI clients (legacy, maintained for compatibility)
+- Built-in note tools (read now, more CRUD tools planned)
+- Script extension system for custom tools (JavaScript/TypeScript)
+- Hot-reload for scripts in the vault-root `mcp-tools/` folder (configurable in settings)
 
 ## Quick start (development)
 
@@ -47,11 +48,27 @@ Copy these files to your vault plugin folder:
 3. Enter the repository URL (example: `https://github.com/daichi-629/obsidian-obsiscripta-mcp`) and add it.
 4. Go back to **Settings → Community plugins** and enable **ObsiScripta Bridge**.
 
+## Protocol Endpoints
+
+The bridge server exposes two protocol endpoints simultaneously:
+
+1. **MCP Standard HTTP** (Recommended): `http://127.0.0.1:3000/mcp`
+   - JSON-RPC 2.0 over HTTP
+   - Implements MCP specification 2025-03-26
+   - For use with MCP-compatible clients
+
+2. **Bridge Protocol v1** (Legacy): `http://127.0.0.1:3000/bridge/v1`
+   - Custom HTTP API
+   - Maintained for backward compatibility
+   - Used by the stdio bridge
+
+See [docs/protocol.md](docs/protocol.md) for detailed protocol specifications.
+
 ## Claude Desktop (stdio bridge) configuration
 
 1. Open **Settings → Community plugins → ObsiScripta Bridge**.
 2. Check the endpoint shown under **Connection info**.
-   - Example: `http://127.0.0.1:3000/bridge/v1`
+   - Example: `http://127.0.0.1:3000`
 3. Download the stdio bridge binary for your OS from the GitHub release assets:
    - https://github.com/daichi-629/obsidian-obsiscripta-mcp/releases
 4. Add a server entry in your Claude Desktop MCP configuration:
@@ -71,6 +88,9 @@ Copy these files to your vault plugin folder:
 ```
 
 If you change the port, run **Restart server** and update `OBSIDIAN_MCP_PORT` to match.
+
+**Note**: The stdio bridge currently uses the v1 API endpoint. Migration to the MCP
+standard endpoint is planned for Phase 2.
 
 ## Script tools
 
