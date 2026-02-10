@@ -147,8 +147,7 @@ export class MCPSettingTab extends PluginSettingTab {
 				toggle
 					.setValue(settings.enableBridgeV1)
 					.onChange(async (value) => {
-						await this.settingsStore.updateEnableBridgeV1(value);
-						this.scheduleDisplay();
+						await this.settingsStore.updateSetting("enableBridgeV1", value);
 					}),
 			);
 
