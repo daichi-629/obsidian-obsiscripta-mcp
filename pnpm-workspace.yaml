@@ -2,6 +2,7 @@ packages:
   - packages/shared
   - packages/obsidian-plugin
   - packages/stdio-bridge
+  - packages/remote-mcp-server
   - packages/script-loader-core
   - packages/obsidian-script-loader
   - packages/integration-tests
