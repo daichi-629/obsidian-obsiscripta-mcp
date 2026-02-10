@@ -91,7 +91,7 @@ export const editNoteTool: MCPToolDefinition = {
 						isError: true
 					};
 				}
-				await context.vault.delete(file);
+				await context.app.fileManager.trashFile(file);
 				return {
 					content: [{
 						type: "text",
