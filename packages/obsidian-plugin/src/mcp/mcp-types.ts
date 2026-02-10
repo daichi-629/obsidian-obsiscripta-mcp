@@ -15,6 +15,9 @@
 import type {
 	Tool,
 	CallToolResult,
+	CallToolRequest,
+	ListToolsRequest,
+	ListToolsResult,
 	TextContent,
 	ImageContent,
 	AudioContent,
@@ -26,6 +29,15 @@ import type {
 	JSONRPCNotification,
 	RequestId,
 	Error as SpecError,
+} from "@modelcontextprotocol/sdk/spec.types.js";
+
+// Import error code constants as values
+import {
+	PARSE_ERROR,
+	INVALID_REQUEST,
+	METHOD_NOT_FOUND,
+	INVALID_PARAMS,
+	INTERNAL_ERROR,
 } from "@modelcontextprotocol/sdk/spec.types.js";
 
 // Re-export SDK spec types with our naming conventions for consistency
@@ -48,42 +60,24 @@ export type JSONRPCResponse = SpecJSONRPCResponse;
 export type JSONRPCError = SpecError;
 export { JSONRPCNotification, RequestId, JSONRPCResultResponse, JSONRPCErrorResponse };
 
-// JSON-RPC Error Codes (standard codes from JSON-RPC 2.0 spec)
+// Re-export error code constants from spec
 export const JSONRPCErrorCode = {
-	ParseError: -32700,
-	InvalidRequest: -32600,
-	MethodNotFound: -32601,
-	InvalidParams: -32602,
-	InternalError: -32603,
+	ParseError: PARSE_ERROR,
+	InvalidRequest: INVALID_REQUEST,
+	MethodNotFound: METHOD_NOT_FOUND,
+	InvalidParams: INVALID_PARAMS,
+	InternalError: INTERNAL_ERROR,
 } as const;
 
-// MCP Tools Protocol Messages (using SDK spec types)
-
-export interface ToolsListRequest extends JSONRPCRequest {
-	method: "tools/list";
-	params?: {
-		cursor?: string;
-	};
-}
-
-export interface ToolsListResponse extends JSONRPCResultResponse {
-	result: {
-		tools: MCPTool[];
-		nextCursor?: string;
-	};
-}
-
-export interface ToolsCallRequest extends JSONRPCRequest {
-	method: "tools/call";
-	params: {
-		name: string;
-		arguments?: Record<string, unknown>;
-	};
-}
-
-export interface ToolsCallResponse extends JSONRPCResultResponse {
+// Re-export MCP request/response types from spec
+export type ToolsListRequest = ListToolsRequest;
+export type ToolsListResponse = JSONRPCResultResponse & {
+	result: ListToolsResult;
+};
+export type ToolsCallRequest = CallToolRequest;
+export type ToolsCallResponse = JSONRPCResultResponse & {
 	result: CallToolResult;
-}
+};
 
 // MCP Session Management
 export interface MCPSessionInfo {
