@@ -191,9 +191,68 @@ export default {
 Notes:
 
 - Relative imports resolve from the script file location.
+- CommonJS `require(...)` can also be used in script tools (Node built-ins like `path` / `fs`, and local CommonJS files).
 - If Dataview is installed, `dv` (Dataview API) is available.
 - If Templater is installed, `tp` (Templater API) is available.
 - If Omnisearch is installed, the global `omnisearch` API is available.
+
+Detailed `require` example:
+
+Place the following two files under `mcp-tools/`.
+
+`mcp-tools/require_example.js`
+
+```js
+export default {
+	description: "Exercise require-based module loading from a helper module.",
+	inputSchema: {
+		type: "object",
+		properties: {
+			name: { type: "string" },
+		},
+	},
+	handler: async (args) => {
+		const helper = require("./require-helper");
+		const message = typeof helper?.buildMessage === "function"
+			? helper.buildMessage(args?.name)
+			: "require helper missing buildMessage";
+
+		return {
+			content: [
+				{
+					type: "text",
+					text: message,
+				},
+			],
+		};
+	},
+};
+```
+
+`mcp-tools/require-helper.js`
+
+```js
+const buildMessage = (name) => {
+	const value = typeof name === "string" && name.trim() ? name.trim() : "world";
+	return `require-ok: hello ${value}`;
+};
+
+module.exports = {
+	buildMessage,
+};
+```
+
+Example input:
+
+```json
+{ "name": "Obsidian" }
+```
+
+Example output (`content[0].text`):
+
+```text
+require-ok: hello Obsidian
+```
 
 Examples:
 
