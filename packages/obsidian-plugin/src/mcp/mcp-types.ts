@@ -2,68 +2,31 @@
  * MCP Standard Protocol Types (Streamable HTTP Transport)
  * Based on MCP specification 2025-03-26
  *
- * We define our own types based on the MCP spec rather than importing from
- * @modelcontextprotocol/sdk to avoid zod runtime dependencies (which would
- * increase bundle size) and maintain flexibility in our implementation.
- *
- * Type definitions are semantically aligned with @modelcontextprotocol/sdk
- * but adapted for our use case:
- * - Tool.inputSchema uses flexible Record<string, unknown> instead of strict schema
- * - Content types omit optional fields not needed for Phase 1
+ * Imports types from @modelcontextprotocol/sdk for consistency with the standard.
+ * This includes zod as a dependency, but ensures our types stay aligned with
+ * the official MCP protocol.
  *
  * References:
  * - MCP Spec: https://modelcontextprotocol.io/specification/2025-03-26
- * - SDK Types: https://github.com/modelcontextprotocol/typescript-sdk
- *
- * Note: @modelcontextprotocol/sdk is installed as a dependency for future use
- * (e.g., SSE streaming in Phase 2+), but not imported here to avoid runtime overhead.
+ * - SDK: https://github.com/modelcontextprotocol/typescript-sdk
  */
 
-// MCP Tool Definition (based on SDK but more flexible)
-export interface MCPTool {
-	name: string;
-	description: string;
-	inputSchema: Record<string, unknown>;
-}
+// Import MCP SDK types (runtime dependency via zod is acceptable)
+import type {
+	Tool,
+	CallToolResult,
+	TextContent,
+	ImageContent,
+	AudioContent,
+	EmbeddedResource,
+} from "@modelcontextprotocol/sdk/types.js";
 
-// MCP Content Types (based on SDK types)
-export interface MCPTextContent {
-	type: "text";
-	text: string;
-	annotations?: {
-		audience?: Array<"user" | "assistant">;
-		priority?: number;
-	};
-}
-
-export interface MCPImageContent {
-	type: "image";
-	data: string;
-	mimeType: string;
-	annotations?: {
-		audience?: Array<"user" | "assistant">;
-		priority?: number;
-	};
-}
-
-export interface MCPAudioContent {
-	type: "audio";
-	data: string;
-	mimeType: string;
-	annotations?: {
-		audience?: Array<"user" | "assistant">;
-		priority?: number;
-	};
-}
-
-export interface MCPResourceContent {
-	type: "resource";
-	resource: {
-		uri: string;
-		mimeType?: string;
-		text?: string;
-	};
-}
+// Re-export SDK types with our naming conventions for consistency
+export type MCPTool = Tool;
+export type MCPTextContent = TextContent;
+export type MCPImageContent = ImageContent;
+export type MCPAudioContent = AudioContent;
+export type MCPResourceContent = EmbeddedResource;
 
 // Content union type
 export type MCPContent =
@@ -108,7 +71,7 @@ export const JSONRPCErrorCode = {
 	InternalError: -32603,
 } as const;
 
-// MCP Tools Protocol Messages (adapted from SDK types)
+// MCP Tools Protocol Messages (using SDK types where applicable)
 
 export interface ToolsListRequest extends JSONRPCRequest {
 	method: "tools/list";
@@ -133,10 +96,7 @@ export interface ToolsCallRequest extends JSONRPCRequest {
 }
 
 export interface ToolsCallResponse extends JSONRPCResponse {
-	result: {
-		content: MCPContent[];
-		isError?: boolean;
-	};
+	result: CallToolResult;
 }
 
 // MCP Session Management

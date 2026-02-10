@@ -24,15 +24,15 @@ export function handleMCPToolsList(
 	request: ToolsListRequest,
 	registry: ToolRegistry
 ): ToolsListResponse {
-	const tools: MCPTool[] = registry
+	const tools = registry
 		.listEnabled()
 		.slice()
 		.sort((a, b) => a.name.localeCompare(b.name))
 		.map((tool) => ({
 			name: tool.name,
 			description: tool.description,
-			inputSchema: tool.inputSchema as unknown as Record<string, unknown>,
-		}));
+			inputSchema: tool.inputSchema,
+		})) as MCPTool[];
 
 	// For Phase 1, we don't implement pagination
 	// nextCursor is omitted when there are no more results
