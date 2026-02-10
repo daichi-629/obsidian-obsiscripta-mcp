@@ -1,6 +1,8 @@
-import { TFile } from "obsidian";
-import { applyPatch } from "diff";
+import { normalizePath, TFile } from "obsidian";
+import { applyPatch, parsePatch } from "diff";
 import { MCPToolDefinition, MCPToolResult } from "../types";
+
+const APPLY_PATCH_BEGIN = "*** Begin Patch";
 
 /**
  * Built-in tool: edit_note
@@ -27,9 +29,19 @@ export const editNoteTool: MCPToolDefinition = {
 		const path = args.path as string;
 		const patch = args.patch as string;
 
+		if (patch.includes(APPLY_PATCH_BEGIN)) {
+			return {
+				content: [{
+					type: "text",
+					text: "Error: edit_note only supports unified diff patches (---/+++ headers)."
+				}],
+				isError: true
+			};
+		}
+
 		// Normalize path: add .md if not present
-		let normalizedPath = path;
-		if (!normalizedPath.endsWith(".md")) {
+		let normalizedPath = normalizePath(path);
+		if (!normalizedPath.toLowerCase().endsWith(".md")) {
 			normalizedPath = `${normalizedPath}.md`;
 		}
 
@@ -61,6 +73,17 @@ export const editNoteTool: MCPToolDefinition = {
 			const currentContent = await context.vault.read(file);
 
 			// Apply the patch
+			const parsed = parsePatch(patch);
+			if (!parsed.length || parsed.every(entry => !entry.hunks || entry.hunks.length === 0)) {
+				return {
+					content: [{
+						type: "text",
+						text: "Error: Patch does not contain any hunks. Ensure it is a unified diff."
+					}],
+					isError: true
+				};
+			}
+
 			const patchedContent = applyPatch(currentContent, patch);
 
 			// Check if patch application failed
@@ -69,6 +92,16 @@ export const editNoteTool: MCPToolDefinition = {
 					content: [{
 						type: "text",
 						text: "Error: Failed to apply patch. The patch may be malformed or not compatible with the current file content."
+					}],
+					isError: true
+				};
+			}
+
+			if (patchedContent === currentContent) {
+				return {
+					content: [{
+						type: "text",
+						text: "Error: Patch applied but produced no changes. Check that the patch matches the current file content."
 					}],
 					isError: true
 				};
