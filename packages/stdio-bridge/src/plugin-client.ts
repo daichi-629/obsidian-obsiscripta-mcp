@@ -3,13 +3,44 @@
  * Implements health check, tool listing, and tool invocation with retry logic
  */
 
+import { createHash } from "node:crypto";
 import type {
 	PluginClientConfig,
 	HealthResponse,
 	ToolListResponse,
 	ToolCallResponse,
 	ErrorResponse,
+	TransportMode,
+	MCPContent,
 } from "./types.js";
+
+interface JSONRPCError {
+	code: number;
+	message: string;
+	data?: unknown;
+}
+
+interface JSONRPCResult<T> {
+	jsonrpc: "2.0";
+	id: string | number | null;
+	result?: T;
+	error?: JSONRPCError;
+}
+
+interface MCPTool {
+	name: string;
+	description?: string;
+	inputSchema?: Record<string, unknown>;
+}
+
+interface MCPToolsListResult {
+	tools: MCPTool[];
+}
+
+interface MCPToolsCallResult {
+	content?: Array<Record<string, unknown>>;
+	isError?: boolean;
+}
 
 /**
  * Error thrown when the plugin returns an HTTP error response
@@ -47,6 +78,7 @@ const DEFAULT_CONFIG = {
 	host: "127.0.0.1",
 	port: 3000,
 	timeout: 5000, // 5 seconds
+	transportMode: "auto" as const,
 } as const;
 
 /**
@@ -62,17 +94,30 @@ const RETRY_CONFIG = {
  * HTTP client for communicating with the Obsidian plugin's Bridge API
  */
 export class PluginClient {
-	private readonly baseUrl: string;
+	private readonly v1BaseUrl: string;
+	private readonly mcpBaseUrl: string;
 	private readonly timeout: number;
+	private readonly transportMode: TransportMode;
+	private preferredTransport: "mcp" | "v1";
+	private fallbackCount = 0;
+	private requestId = 1;
 
 	constructor(config?: Partial<PluginClientConfig>) {
 		const mergedConfig = {
 			host: config?.host ?? DEFAULT_CONFIG.host,
 			port: config?.port ?? DEFAULT_CONFIG.port,
 			timeout: config?.timeout ?? DEFAULT_CONFIG.timeout,
+			transportMode: config?.transportMode ?? DEFAULT_CONFIG.transportMode,
 		};
-		this.baseUrl = `http://${mergedConfig.host}:${mergedConfig.port}/bridge/v1`;
+		this.v1BaseUrl = `http://${mergedConfig.host}:${mergedConfig.port}/bridge/v1`;
+		this.mcpBaseUrl = `http://${mergedConfig.host}:${mergedConfig.port}/mcp`;
 		this.timeout = mergedConfig.timeout;
+		this.transportMode = mergedConfig.transportMode;
+		this.preferredTransport = mergedConfig.transportMode === "v1" ? "v1" : "mcp";
+
+		console.error(
+			`[PluginClient] Transport mode: ${this.transportMode} (preferred: ${this.preferredTransport})`
+		);
 	}
 
 	/**
@@ -80,7 +125,24 @@ export class PluginClient {
 	 * @returns Health response with status, version, and protocol version
 	 */
 	async health(): Promise<HealthResponse> {
-		return this.request<HealthResponse>("GET", "/health");
+		if (this.shouldUseMcpFirst()) {
+			try {
+				await this.mcpToolsList();
+				return {
+					status: "ok",
+					version: "unknown",
+					protocolVersion: "mcp-standard-http",
+				};
+			} catch (error) {
+				if (!this.canFallbackToV1()) {
+					throw error;
+				}
+				this.logFallback("health", error);
+				return this.v1Request<HealthResponse>("GET", "/health");
+			}
+		}
+
+		return this.v1Request<HealthResponse>("GET", "/health");
 	}
 
 	/**
@@ -88,7 +150,28 @@ export class PluginClient {
 	 * @returns Tool list response with tools array and hash
 	 */
 	async listTools(): Promise<ToolListResponse> {
-		return this.request<ToolListResponse>("GET", "/tools");
+		if (this.shouldUseMcpFirst()) {
+			try {
+				const result = await this.mcpToolsList();
+				const tools = result.tools.map((tool) => ({
+					name: tool.name,
+					description: tool.description ?? "",
+					inputSchema: tool.inputSchema ?? {},
+				}));
+				const hash = createHash("sha256")
+					.update(JSON.stringify(tools))
+					.digest("hex");
+				return { tools, hash };
+			} catch (error) {
+				if (!this.canFallbackToV1()) {
+					throw error;
+				}
+				this.logFallback("listTools", error);
+				return this.v1Request<ToolListResponse>("GET", "/tools");
+			}
+		}
+
+		return this.v1Request<ToolListResponse>("GET", "/tools");
 	}
 
 	/**
@@ -102,7 +185,35 @@ export class PluginClient {
 		toolName: string,
 		args: Record<string, unknown> = {}
 	): Promise<ToolCallResponse> {
-		return this.request<ToolCallResponse>(
+		if (this.shouldUseMcpFirst()) {
+			try {
+				const result = await this.mcpToolsCall(toolName, args);
+				const content = this.normalizeMcpContent(result.content);
+				if (result.isError) {
+					return {
+						success: false,
+						content,
+						isError: true,
+					};
+				}
+				return {
+					success: true,
+					content,
+				};
+			} catch (error) {
+				if (!this.canFallbackToV1()) {
+					throw error;
+				}
+				this.logFallback("callTool", error);
+				return this.v1Request<ToolCallResponse>(
+					"POST",
+					`/tools/${encodeURIComponent(toolName)}/call`,
+					{ arguments: args }
+				);
+			}
+		}
+
+		return this.v1Request<ToolCallResponse>(
 			"POST",
 			`/tools/${encodeURIComponent(toolName)}/call`,
 			{ arguments: args }
@@ -182,20 +293,111 @@ export class PluginClient {
 		);
 	}
 
-	/**
-	 * Make an HTTP request to the plugin's Bridge API
-	 * @param method - HTTP method (GET or POST)
-	 * @param path - API endpoint path
-	 * @param body - Request body for POST requests
-	 * @returns Parsed JSON response
-	 * @throws PluginClientError for HTTP errors
-	 */
-	private async request<T>(
+	private shouldUseMcpFirst(): boolean {
+		if (this.transportMode === "v1") {
+			return false;
+		}
+		if (this.transportMode === "mcp") {
+			return true;
+		}
+		return this.preferredTransport === "mcp";
+	}
+
+	private canFallbackToV1(): boolean {
+		return this.transportMode === "auto";
+	}
+
+	private logFallback(operation: string, error: unknown): void {
+		this.fallbackCount += 1;
+		this.preferredTransport = "v1";
+		const reason = error instanceof Error ? error.message : String(error);
+		console.error(
+			`[PluginClient] MCP fallback triggered (${operation}) -> Bridge v1; reason="${reason}"; fallbackCount=${this.fallbackCount}`
+		);
+	}
+
+
+	private normalizeMcpContent(content: unknown): MCPContent[] {
+		if (!Array.isArray(content)) {
+			return [];
+		}
+
+		return content
+			.filter((item): item is MCPContent =>
+				typeof item === "object" && item !== null && "type" in item
+			)
+			.map((item) => item);
+	}
+
+	private async mcpToolsList(): Promise<MCPToolsListResult> {
+		const response = await this.mcpRequest<MCPToolsListResult>("tools/list", {});
+		if (!Array.isArray(response.tools)) {
+			throw new PluginClientError(
+				"Invalid MCP tools/list response",
+				502,
+				"INVALID_MCP_RESPONSE"
+			);
+		}
+		return response;
+	}
+
+	private async mcpToolsCall(
+		toolName: string,
+		args: Record<string, unknown>
+	): Promise<MCPToolsCallResult> {
+		const response = await this.mcpRequest<MCPToolsCallResult>("tools/call", {
+			name: toolName,
+			arguments: args,
+		});
+		if (!response || typeof response !== "object") {
+			throw new PluginClientError(
+				"Invalid MCP tools/call response",
+				502,
+				"INVALID_MCP_RESPONSE"
+			);
+		}
+		return response;
+	}
+
+	private async mcpRequest<T>(method: string, params: unknown): Promise<T> {
+		const body = {
+			jsonrpc: "2.0" as const,
+			id: this.requestId++,
+			method,
+			params,
+		};
+		const response = await this.fetchJson<JSONRPCResult<T>>(this.mcpBaseUrl, "POST", body);
+		if (response.error) {
+			throw new PluginClientError(
+				`MCP error ${response.error.code}: ${response.error.message}`,
+				502,
+				"MCP_ERROR",
+				response.error.data
+			);
+		}
+		if (typeof response.result === "undefined") {
+			throw new PluginClientError(
+				"MCP response missing result",
+				502,
+				"INVALID_MCP_RESPONSE"
+			);
+		}
+		return response.result;
+	}
+
+	private async v1Request<T>(
 		method: "GET" | "POST",
 		path: string,
 		body?: unknown
 	): Promise<T> {
-		const url = `${this.baseUrl}${path}`;
+		return this.fetchJson<T>(`${this.v1BaseUrl}${path}`, method, body);
+	}
+
+	private async fetchJson<T>(
+		url: string,
+		method: "GET" | "POST",
+		body?: unknown
+	): Promise<T> {
 		const controller = new AbortController();
 		const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
@@ -210,7 +412,8 @@ export class PluginClient {
 				signal: controller.signal,
 			});
 
-			const data = await response.json();
+			const text = await response.text();
+			const data = text ? (JSON.parse(text) as unknown) : {};
 
 			if (!response.ok) {
 				const errorResponse = data as ErrorResponse;
@@ -228,7 +431,6 @@ export class PluginClient {
 				throw error;
 			}
 
-			// Handle fetch errors (network, timeout, etc.)
 			if (error instanceof Error) {
 				if (error.name === "AbortError") {
 					throw new PluginClientError(
@@ -238,7 +440,14 @@ export class PluginClient {
 					);
 				}
 
-				// Network errors (ECONNREFUSED, ENOTFOUND, etc.)
+				if (error instanceof SyntaxError) {
+					throw new PluginClientError(
+						`Invalid JSON response: ${error.message}`,
+						502,
+						"INVALID_JSON"
+					);
+				}
+
 				throw new PluginClientError(
 					`Network error: ${error.message}`,
 					0,
