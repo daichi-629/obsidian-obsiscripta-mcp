@@ -74,7 +74,6 @@ export class SettingsStore extends SettingStoreBase<MCPPluginSettings> {
 		}
 	}
 
-
 	private generateMcpApiKey(): string {
 		const bytes = new Uint8Array(24);
 		crypto.getRandomValues(bytes);

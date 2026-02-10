@@ -84,8 +84,8 @@ export class MCPSettingTab extends PluginSettingTab {
 			cls: "mcp-settings-warning-title",
 		});
 		const bindWarningText = settings.bindHost === "0.0.0.0"
-			? "Warning: the server binds to all network interfaces (0.0.0.0). It is accessible from other devices on your network. Bridge v1 has no authentication."
-			: "Warning: the server binds to localhost only (127.0.0.1). Bridge v1 has no authentication.";
+			? "Warning: the server binds to all network interfaces (0.0.0.0). It is accessible from other devices on your network."
+			: "Warning: the server binds to localhost only (127.0.0.1).";
 		warningEl.createEl("p", {
 			text: bindWarningText,
 			cls: "mcp-settings-warning-body",
@@ -139,6 +139,18 @@ export class MCPSettingTab extends PluginSettingTab {
 					}),
 			);
 
+
+		new Setting(containerEl)
+			.setName("Enable bridge v1 API")
+			.setDesc("Expose legacy unauthenticated endpoints under /bridge/v1 (requires restart)")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(settings.enableBridgeV1)
+					.onChange(async (value) => {
+						await this.settingsStore.updateSetting("enableBridgeV1", value);
+					}),
+			);
+
 		new Setting(containerEl)
 			.setName("Port")
 			.setDesc("The port number for the server (requires restart)")
@@ -183,7 +195,9 @@ export class MCPSettingTab extends PluginSettingTab {
 		new Setting(containerEl).setName("Mcp authentication").setHeading();
 
 		containerEl.createEl("p", {
-			text: "Mcp standard (/mcp) requires an API key. Bridge v1 (/bridge/v1) remains unauthenticated for v1 compatibility.",
+			text: settings.enableBridgeV1
+				? "Mcp standard (/mcp) requires an API key. Bridge v1 (/bridge/v1) is enabled and remains unauthenticated for compatibility."
+				: "Mcp standard (/mcp) requires an API key. Bridge v1 (/bridge/v1) is currently disabled.",
 			cls: "setting-item-description",
 		});
 

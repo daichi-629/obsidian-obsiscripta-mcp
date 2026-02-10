@@ -3,12 +3,15 @@ import { BridgeServer } from "../mcp/server";
 import { ToolRegistry } from "../mcp/tools/registry";
 import { ToolExecutor } from "../mcp/tools/executor";
 import { AppContext } from "./context";
+import { SettingsStore } from "../settings/settings-store";
+import { EventRef } from "../settings/setting-store-base";
 
 // Settings interface for bridge configuration
 interface BridgeSettings {
 	autoStart: boolean;
 	port: number;
 	bindHost: string;
+	enableBridgeV1: boolean;
 	mcpApiKeys: string[];
 }
 
@@ -20,6 +23,7 @@ export class BridgeController {
 	private toolRegistry: ToolRegistry;
 	private server: BridgeServer | null = null;
 	private runningSettings: BridgeSettings | null = null;
+	private changeEventRef: EventRef | null = null;
 
 	constructor(
 		app: App,
@@ -44,6 +48,8 @@ export class BridgeController {
 		return (
 			this.runningSettings.port !== this.settings.port ||
 			this.runningSettings.bindHost !== this.settings.bindHost ||
+			this.runningSettings.enableBridgeV1 !==
+				this.settings.enableBridgeV1 ||
 			this.runningSettings.mcpApiKeys.join("\n") !==
 				this.settings.mcpApiKeys.join("\n")
 		);
@@ -74,6 +80,7 @@ export class BridgeController {
 			executor,
 			this.settings.port,
 			this.settings.bindHost,
+			this.settings.enableBridgeV1,
 			this.settings.mcpApiKeys,
 		);
 		try {
@@ -107,5 +114,47 @@ export class BridgeController {
 		await this.startWithNotice(
 			`Bridge server restarted on port ${this.settings.port}`,
 		);
+	}
+
+	/**
+	 * Subscribe to settings changes to automatically update bridge configuration.
+	 * This keeps the bridge controller in sync with the settings store.
+	 */
+	subscribeToSettings(settingsStore: SettingsStore): void {
+		this.changeEventRef = settingsStore.on("change", (oldSettings, newSettings) => {
+			// Check if API keys changed (order-insensitive comparison)
+			const apiKeysChanged =
+				oldSettings.mcpApiKeys.length !== newSettings.mcpApiKeys.length ||
+				!oldSettings.mcpApiKeys.every((key) => newSettings.mcpApiKeys.includes(key));
+
+			// Update BridgeController if bridge-related settings changed
+			const bridgeSettingsChanged =
+				oldSettings.port !== newSettings.port ||
+				oldSettings.bindHost !== newSettings.bindHost ||
+				oldSettings.autoStart !== newSettings.autoStart ||
+				oldSettings.enableBridgeV1 !== newSettings.enableBridgeV1 ||
+				apiKeysChanged;
+
+			if (bridgeSettingsChanged) {
+				this.updateSettings({
+					port: newSettings.port,
+					bindHost: newSettings.bindHost,
+					autoStart: newSettings.autoStart,
+					enableBridgeV1: newSettings.enableBridgeV1,
+					mcpApiKeys: [...newSettings.mcpApiKeys],
+				});
+			}
+		});
+	}
+
+	/**
+	 * Unsubscribe from settings changes.
+	 * Should be called when the controller is being destroyed.
+	 */
+	unsubscribe(): void {
+		if (this.changeEventRef) {
+			this.changeEventRef.unsubscribe();
+			this.changeEventRef = null;
+		}
 	}
 }

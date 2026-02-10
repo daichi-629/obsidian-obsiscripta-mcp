@@ -111,7 +111,7 @@ describe('script-loader-core + ToolExecutor + BridgeServer + stdio-bridge full i
     cleanup.push(() => loader.stop());
 
     const port = await getFreePort();
-    const bridgeServer = new BridgeServer(executor, port, '127.0.0.1', [apiKey]);
+    const bridgeServer = new BridgeServer(executor, port, '127.0.0.1', true, [apiKey]);
     await bridgeServer.start();
     cleanup.push(() => bridgeServer.stop());
 

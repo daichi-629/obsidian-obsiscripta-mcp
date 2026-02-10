@@ -62,7 +62,7 @@ describe('BridgeServer MCP authentication E2E', () => {
 
     const port = await getFreePort();
     const apiKey = 'obsi_test_key';
-    const server = new BridgeServer(executor, port, '127.0.0.1', [apiKey]);
+    const server = new BridgeServer(executor, port, '127.0.0.1', true, [apiKey]);
     await server.start();
     cleanup.push(() => server.stop());
 
