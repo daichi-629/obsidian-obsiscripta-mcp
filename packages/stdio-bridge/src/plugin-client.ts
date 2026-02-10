@@ -5,6 +5,12 @@
 
 import { createHash } from "node:crypto";
 import type {
+	CallToolResult,
+	JSONRPCErrorResponse,
+	JSONRPCResponse,
+	ListToolsResult,
+} from "@modelcontextprotocol/sdk/spec.types.js";
+import type {
 	PluginClientConfig,
 	HealthResponse,
 	ToolListResponse,
@@ -13,34 +19,6 @@ import type {
 	TransportMode,
 	MCPContent,
 } from "./types.js";
-
-interface JSONRPCError {
-	code: number;
-	message: string;
-	data?: unknown;
-}
-
-interface JSONRPCResult<T> {
-	jsonrpc: "2.0";
-	id: string | number | null;
-	result?: T;
-	error?: JSONRPCError;
-}
-
-interface MCPTool {
-	name: string;
-	description?: string;
-	inputSchema?: Record<string, unknown>;
-}
-
-interface MCPToolsListResult {
-	tools: MCPTool[];
-}
-
-interface MCPToolsCallResult {
-	content?: Array<Record<string, unknown>>;
-	isError?: boolean;
-}
 
 /**
  * Error thrown when the plugin returns an HTTP error response
@@ -329,8 +307,8 @@ export class PluginClient {
 			.map((item) => item);
 	}
 
-	private async mcpToolsList(): Promise<MCPToolsListResult> {
-		const response = await this.mcpRequest<MCPToolsListResult>("tools/list", {});
+	private async mcpToolsList(): Promise<ListToolsResult> {
+		const response = await this.mcpRequest<ListToolsResult>("tools/list", {});
 		if (!Array.isArray(response.tools)) {
 			throw new PluginClientError(
 				"Invalid MCP tools/list response",
@@ -344,8 +322,8 @@ export class PluginClient {
 	private async mcpToolsCall(
 		toolName: string,
 		args: Record<string, unknown>
-	): Promise<MCPToolsCallResult> {
-		const response = await this.mcpRequest<MCPToolsCallResult>("tools/call", {
+	): Promise<CallToolResult> {
+		const response = await this.mcpRequest<CallToolResult>("tools/call", {
 			name: toolName,
 			arguments: args,
 		});
@@ -366,23 +344,24 @@ export class PluginClient {
 			method,
 			params,
 		};
-		const response = await this.fetchJson<JSONRPCResult<T>>(this.mcpBaseUrl, "POST", body);
-		if (response.error) {
+		const response = await this.fetchJson<JSONRPCResponse>(this.mcpBaseUrl, "POST", body);
+		if ("error" in response) {
+			const error = (response as JSONRPCErrorResponse).error;
 			throw new PluginClientError(
-				`MCP error ${response.error.code}: ${response.error.message}`,
+				`MCP error ${error.code}: ${error.message}`,
 				502,
 				"MCP_ERROR",
-				response.error.data
+				error.data
 			);
 		}
-		if (typeof response.result === "undefined") {
+		if (!("result" in response)) {
 			throw new PluginClientError(
 				"MCP response missing result",
 				502,
 				"INVALID_MCP_RESPONSE"
 			);
 		}
-		return response.result;
+		return response.result as T;
 	}
 
 	private async v1Request<T>(
