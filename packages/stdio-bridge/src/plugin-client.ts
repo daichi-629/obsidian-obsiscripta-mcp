@@ -82,6 +82,7 @@ export class PluginClient {
 	private preferredTransport: "mcp" | "v1";
 	private fallbackCount = 0;
 	private requestId = 1;
+	private mcpSessionId: string | null = null;
 
 	constructor(config?: Partial<PluginClientConfig>) {
 		const mergedConfig = {
@@ -389,35 +390,103 @@ export class PluginClient {
 	}
 
 	private async mcpRequest<T>(method: string, params: unknown): Promise<T> {
+		let retryAfterSessionReset = false;
+
+		while (true) {
+			try {
+				if (!this.mcpSessionId) {
+					this.mcpSessionId = await this.initializeMcpSession();
+				}
+
+				const { response } = await this.sendMcpRequest(method, params, this.mcpSessionId);
+				if ("error" in response) {
+					const error = (response as JSONRPCErrorResponse).error;
+					throw new PluginClientError(
+						`MCP error ${error.code}: ${error.message}`,
+						502,
+						"MCP_ERROR",
+						{ mcpError: error, data: error.data }
+					);
+				}
+				if (!("result" in response)) {
+					throw new PluginClientError(
+						"MCP response missing result",
+						502,
+						"INVALID_MCP_RESPONSE"
+					);
+				}
+				return response.result as T;
+			} catch (error) {
+				if (error instanceof PluginClientError && error.statusCode === 404 && !retryAfterSessionReset) {
+					this.mcpSessionId = null;
+					retryAfterSessionReset = true;
+					continue;
+				}
+				throw error;
+			}
+		}
+	}
+
+	private async initializeMcpSession(): Promise<string> {
+		const { response, headers } = await this.sendMcpRequest(
+			"initialize",
+			{
+				protocolVersion: "2025-03-26",
+				capabilities: {},
+				clientInfo: {
+					name: "obsidian-mcp-bridge",
+					version: "0.2.0",
+				},
+			},
+			null
+		);
+
+		if ("error" in response) {
+			const error = (response as JSONRPCErrorResponse).error;
+			throw new PluginClientError(
+				`MCP initialize error ${error.code}: ${error.message}`,
+				502,
+				"MCP_ERROR",
+				{ mcpError: error, data: error.data }
+			);
+		}
+
+		const sessionId = headers.get("MCP-Session-Id") ?? headers.get("mcp-session-id");
+		if (!sessionId) {
+			throw new PluginClientError(
+				"MCP initialize response missing MCP-Session-Id",
+				502,
+				"INVALID_MCP_RESPONSE"
+			);
+		}
+
+		return sessionId;
+	}
+
+	private async sendMcpRequest(
+		method: string,
+		params: unknown,
+		sessionId: string | null
+	): Promise<{ response: JSONRPCResponse; headers: Headers }> {
 		const body = {
 			jsonrpc: "2.0" as const,
 			id: this.requestId++,
 			method,
 			params,
 		};
-		const response = await this.fetchJson<JSONRPCResponse>(
+
+		const headers: Record<string, string> = {};
+		if (sessionId) {
+			headers["MCP-Session-Id"] = sessionId;
+		}
+
+		return this.fetchJson<JSONRPCResponse>(
 			this.mcpBaseUrl,
 			"POST",
 			body,
-			this.apiKey
+			this.apiKey,
+			headers
 		);
-		if ("error" in response) {
-			const error = (response as JSONRPCErrorResponse).error;
-			throw new PluginClientError(
-				`MCP error ${error.code}: ${error.message}`,
-				502,
-				"MCP_ERROR",
-				{ mcpError: error, data: error.data }
-			);
-		}
-		if (!("result" in response)) {
-			throw new PluginClientError(
-				"MCP response missing result",
-				502,
-				"INVALID_MCP_RESPONSE"
-			);
-		}
-		return response.result as T;
 	}
 
 	private async v1Request<T>(
@@ -425,15 +494,17 @@ export class PluginClient {
 		path: string,
 		body?: unknown
 	): Promise<T> {
-		return this.fetchJson<T>(`${this.v1BaseUrl}${path}`, method, body, "");
+		const { response } = await this.fetchJson<T>(`${this.v1BaseUrl}${path}`, method, body, "");
+		return response;
 	}
 
 	private async fetchJson<T>(
 		url: string,
 		method: "GET" | "POST",
 		body?: unknown,
-		apiKey: string = ""
-	): Promise<T> {
+		apiKey: string = "",
+		extraHeaders: Record<string, string> = {}
+	): Promise<{ response: T; headers: Headers }> {
 		const controller = new AbortController();
 		const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
@@ -441,6 +512,7 @@ export class PluginClient {
 			const headers: Record<string, string> = {
 				"Content-Type": "application/json",
 				Accept: "application/json",
+				...extraHeaders,
 			};
 			if (apiKey) {
 				headers["X-ObsiScripta-Api-Key"] = apiKey;
@@ -466,7 +538,7 @@ export class PluginClient {
 				);
 			}
 
-			return data as T;
+			return { response: data as T, headers: response.headers };
 		} catch (error) {
 			if (error instanceof PluginClientError) {
 				throw error;

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serve, ServerType } from "@hono/node-server";
 import type { Socket } from "net";
+import { randomUUID } from "crypto";
 import { ToolExecutor } from "./tools/executor";
 import { ToolCallRequest } from "./bridge-types";
 import {
@@ -18,6 +19,7 @@ export class BridgeServer {
 	private readonly executor: ToolExecutor;
 	private readonly mcpApiKeys: ReadonlySet<string>;
 	private readonly enableBridgeV1: boolean;
+	private readonly mcpSessions = new Map<string, { createdAt: number; lastAccessedAt: number }>();
 	private port: number;
 	private host: string;
 	private app: Hono;
@@ -56,6 +58,35 @@ export class BridgeServer {
 		}
 
 		return token.trim();
+	}
+
+	private isInitializeRequest(body: unknown): boolean {
+		if (typeof body !== "object" || body === null) {
+			return false;
+		}
+
+		const payload = body as { method?: unknown };
+		return payload.method === "initialize";
+	}
+
+	private createSessionId(): string {
+		return randomUUID();
+	}
+
+	private getSessionFromHeader(sessionIdHeader: string | undefined): string | null {
+		if (!sessionIdHeader || sessionIdHeader.trim().length === 0) {
+			return null;
+		}
+
+		const sessionId = sessionIdHeader.trim();
+		for (let i = 0; i < sessionId.length; i += 1) {
+			const code = sessionId.charCodeAt(i);
+			if (code < 0x21 || code > 0x7e) {
+				return null;
+			}
+		}
+
+		return sessionId;
 	}
 
 	/**
@@ -178,8 +209,8 @@ export class BridgeServer {
 			"/mcp",
 			cors({
 				origin: "*",
-				allowMethods: ["GET", "POST", "OPTIONS"],
-				allowHeaders: ["Content-Type", "Mcp-Session-Id", "Authorization", "X-ObsiScripta-Api-Key"],
+				allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
+				allowHeaders: ["Content-Type", "MCP-Session-Id", "Authorization", "X-ObsiScripta-Api-Key"],
 			}),
 		);
 
@@ -236,6 +267,32 @@ export class BridgeServer {
 			return await next();
 		});
 
+		app.delete("/mcp", async (c) => {
+			const sessionId = this.getSessionFromHeader(c.req.header("mcp-session-id"));
+			if (!sessionId) {
+				return c.json(
+					{
+						error: "Missing MCP session",
+						message: "MCP-Session-Id header is required",
+					},
+					400,
+				);
+			}
+
+			if (!this.mcpSessions.has(sessionId)) {
+				return c.json(
+					{
+						error: "Session not found",
+						message: "Session not found",
+					},
+					404,
+				);
+			}
+
+			this.mcpSessions.delete(sessionId);
+			return c.body(null, 204);
+		});
+
 		// MCP Standard HTTP endpoint (JSON-RPC over HTTP)
 		app.post("/mcp", async (c) => {
 			// Parse request body
@@ -245,6 +302,51 @@ export class BridgeServer {
 			} catch {
 				const errorResponse = createParseErrorResponse();
 				return c.json(errorResponse, 400);
+			}
+
+			const providedSessionId = this.getSessionFromHeader(
+				c.req.header("mcp-session-id")
+			);
+
+			if (c.req.header("mcp-session-id") && !providedSessionId) {
+				return c.json(
+					{
+						error: "Invalid MCP session",
+						message: "MCP-Session-Id must contain only visible ASCII characters",
+					},
+					400,
+				);
+			}
+
+			if (providedSessionId && !this.mcpSessions.has(providedSessionId)) {
+				return c.json(
+					{
+						error: "Session not found",
+						message: "Session not found",
+					},
+					404,
+				);
+			}
+
+			const isInitialize = this.isInitializeRequest(body);
+			if (!isInitialize && !providedSessionId) {
+				return c.json(
+					{
+						error: "Missing MCP session",
+						message: "MCP-Session-Id header is required after initialize",
+					},
+					400,
+				);
+			}
+
+			if (isInitialize && providedSessionId) {
+				return c.json(
+					{
+						error: "Invalid initialize request",
+						message: "Initialize requests must not include MCP-Session-Id",
+					},
+					400,
+				);
 			}
 
 			// Parse JSON-RPC message
@@ -265,6 +367,21 @@ export class BridgeServer {
 					this.executor.getRegistry(),
 					this.executor.getContext()
 				);
+
+				if (isInitialize) {
+					const sessionId = this.createSessionId();
+					const now = Date.now();
+					this.mcpSessions.set(sessionId, {
+						createdAt: now,
+						lastAccessedAt: now,
+					});
+					c.header("MCP-Session-Id", sessionId);
+				} else if (providedSessionId) {
+					const session = this.mcpSessions.get(providedSessionId);
+					if (session) {
+						session.lastAccessedAt = Date.now();
+					}
+				}
 
 				// For Phase 1, we return application/json (no SSE streaming)
 				// Phase 2+ will add SSE support when needed
