@@ -11,6 +11,7 @@ import {
 	createParseErrorResponse,
 	createInvalidRequestResponse,
 } from "./mcp-api";
+import { clearSessionStore } from "./session-store";
 
 export class BridgeServer {
 	private static readonly MAX_BODY_BYTES = 1024 * 1024;
@@ -290,6 +291,7 @@ export class BridgeServer {
 			}
 
 			this.mcpSessions.delete(sessionId);
+			clearSessionStore(sessionId);
 			return c.body(null, 204);
 		});
 
@@ -365,7 +367,7 @@ export class BridgeServer {
 				const response = await handleMCPRequest(
 					request,
 					this.executor.getRegistry(),
-					this.executor.getContext()
+					this.executor.getContext(providedSessionId ?? undefined)
 				);
 
 				if (isInitialize) {

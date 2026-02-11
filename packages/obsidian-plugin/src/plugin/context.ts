@@ -1,5 +1,6 @@
 import { App, EventRef, Vault } from "obsidian";
 import type MCPPlugin from "../main";
+import type { SessionApi } from "../mcp/session-store";
 
 /**
  * Minimal application context interface.
@@ -14,6 +15,8 @@ export interface AppContext {
 	vault: Vault;
 	/** Obsidian App instance for global app state */
 	app: App;
+	/** Per-session key/value storage for MCP and tool execution */
+	session: SessionApi;
 }
 
 /**

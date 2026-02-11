@@ -5,6 +5,7 @@ import { ToolExecutor } from "../mcp/tools/executor";
 import { AppContext } from "./context";
 import { SettingsStore } from "../settings/settings-store";
 import { EventRef } from "../settings/setting-store-base";
+import { createSessionApi } from "../mcp/session-store";
 
 // Settings interface for bridge configuration
 interface BridgeSettings {
@@ -74,6 +75,7 @@ export class BridgeController {
 		const toolContext: AppContext = {
 			vault: this.vault,
 			app: this.app,
+			session: createSessionApi(undefined),
 		};
 		const executor = new ToolExecutor(this.toolRegistry, toolContext);
 		this.server = new BridgeServer(
