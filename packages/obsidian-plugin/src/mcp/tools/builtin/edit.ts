@@ -1,6 +1,7 @@
 import { normalizePath, TFile } from "obsidian";
 import diff_match_patch from "diff-match-patch";
 import { MCPToolDefinition, MCPToolResult } from "../types";
+import { getReadSessionKey } from "./note-session";
 
 function normalizeNotePath(path: string): string {
 	let normalizedPath = normalizePath(path);
@@ -77,6 +78,16 @@ export const editNoteTool: MCPToolDefinition = {
 		}
 
 		const normalizedPath = normalizeNotePath(path);
+		if (!context.session.has(getReadSessionKey(normalizedPath))) {
+			return {
+				content: [{
+					type: "text",
+					text: `Error: Call read_note for "${normalizedPath}" in this session before edit_note.`
+				}],
+				isError: true
+			};
+		}
+
 		const trimmedPatch = patch.trim();
 
 		if (trimmedPatch.length === 0) {
