@@ -57,6 +57,10 @@ export class SettingsStore extends SettingStoreBase<MCPPluginSettings> {
 			? Array.from(new Set(this.settings.disabledTools))
 			: [];
 
+		this.settings.searchExcludedTools = Array.isArray(this.settings.searchExcludedTools)
+			? Array.from(new Set(this.settings.searchExcludedTools))
+			: [];
+
 		// Normalize auth key list
 		this.settings.mcpApiKeys = Array.isArray(this.settings.mcpApiKeys)
 			? Array.from(new Set(this.settings.mcpApiKeys.filter((key) => typeof key === "string" && key.trim().length > 0)))
@@ -108,6 +112,17 @@ export class SettingsStore extends SettingStoreBase<MCPPluginSettings> {
 			await this.removeFromArraySetting("disabledTools", name);
 		} else {
 			await this.addToArraySetting("disabledTools", name);
+		}
+	}
+
+	/**
+	 * Include or exclude a tool from the built-in search index.
+	 */
+	async setToolIncludedInSearch(name: string, included: boolean): Promise<void> {
+		if (included) {
+			await this.removeFromArraySetting("searchExcludedTools", name);
+		} else {
+			await this.addToArraySetting("searchExcludedTools", name);
 		}
 	}
 }

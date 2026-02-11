@@ -319,7 +319,16 @@ export class MCPSettingTab extends PluginSettingTab {
 					toggle.setValue(this.toolingManager.isToolEnabled(toolName));
 					toggle.onChange(async (value) => {
 						await this.settingsStore.setToolEnabled(toolName, value);
-						// ToolingManager is automatically updated via settingsStore.on("change")
+					});
+				});
+
+			new Setting(containerEl)
+				.setName(`${toolName} (Search index)`)
+				.setDesc("Include this tool in built-in tool search results")
+				.addToggle((toggle) => {
+					toggle.setValue(this.toolingManager.isToolIncludedInSearch(toolName));
+					toggle.onChange(async (value) => {
+						await this.settingsStore.setToolIncludedInSearch(toolName, value);
 					});
 				});
 		};
