@@ -15,6 +15,7 @@ import { ExampleManager } from "../mcp/tools/scripting/example-manager";
 import { EventRegistrar, ScriptExecutionContext } from "./context";
 import { SettingsStore } from "../settings/settings-store";
 import { EventRef } from "../settings/setting-store-base";
+import { createSessionContext } from "../mcp/session-store";
 
 // Coordinates built-in and script tool lifecycle + registry state.
 export class ToolingManager {
@@ -43,7 +44,12 @@ export class ToolingManager {
 		this.app = app;
 		this.settings = settings;
 		this.eventRegistrar = eventRegistrar;
-		this.scriptContext = { vault, app, plugin };
+		this.scriptContext = {
+			vault,
+			app,
+			plugin,
+			session: createSessionContext("script-loader-default"),
+		};
 		this.exampleSourcePath = exampleSourcePath;
 		this.registry = new ToolRegistry(disabledTools);
 	}
