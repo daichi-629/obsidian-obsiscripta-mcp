@@ -115,7 +115,7 @@ describe("ScriptLoaderCore - Desired Behavior", () => {
 			scriptHost.setFile("mcp-tools/types.d.ts", "export type T = {};", 2000);
 			scriptHost.setFile("mcp-tools/tool.ts", "export default {};", 3000);
 
-			callbacks.isScriptPath = vi.fn((path) => path.endsWith(".ts"));
+			callbacks.isScriptPath = vi.fn((path) => path.endsWith(".ts") && !path.endsWith(".d.ts"));
 
 			loader = createLoader();
 			await loader.start();

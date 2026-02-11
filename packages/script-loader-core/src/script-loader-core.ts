@@ -5,7 +5,6 @@ import {
 	ScriptExecutionContext,
 	ScriptHost,
 	ScriptLoaderCallbacks,
-	ScriptLoaderType,
 	ScriptMetadata,
 } from "./types";
 import { ScriptRegistry } from "./script-registry";
@@ -248,8 +247,12 @@ export class ScriptLoaderCore {
 
 		try {
 			const fileInfo = await this.scriptHost.readFile(scriptPath);
-			const loader = this.resolveLoaderType(scriptPath, fileInfo.loaderType);
-			const compiled = await this.compiler.compile(scriptPath, fileInfo.contents, loader, fileInfo.mtime);
+			const compiled = await this.compiler.compile(
+				scriptPath,
+				fileInfo.contents,
+				fileInfo.loaderType,
+				fileInfo.mtime
+			);
 
 			// Load script using runtime
 			const handle = await this.runtime.load(compiled, scriptPath, this.scriptContext);
@@ -300,22 +303,4 @@ export class ScriptLoaderCore {
 		this.callbacks.onScriptUnloaded?.(metadata);
 	}
 
-	/**
-	 * Get the loader type for a file path
-	 */
-	private resolveLoaderType(filePath: string, explicitLoaderType?: ScriptLoaderType): ScriptLoaderType {
-		if (explicitLoaderType) {
-			return explicitLoaderType;
-		}
-
-		const lowerPath = filePath.toLowerCase();
-		if (lowerPath.endsWith(".js")) {
-			return "js";
-		}
-		if (lowerPath.endsWith(".ts") && !lowerPath.endsWith(".d.ts")) {
-			return "ts";
-		}
-
-		throw new Error(`Unable to determine loader type for: ${filePath}`);
-	}
 }

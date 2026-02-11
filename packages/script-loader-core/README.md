@@ -26,7 +26,7 @@ The core depends on three key interfaces plus optional module resolution:
 interface FileInfo {
   contents: string;
   mtime: number;
-  loaderType?: "js" | "ts";
+  loaderType: "js" | "ts";
 }
 
 interface ScriptHost {
@@ -40,7 +40,7 @@ interface ScriptHost {
 
 - `readFile(path: string): Promise<FileInfo>`
   - Reads a script path and returns source + metadata.
-  - `loaderType` is optional, but required when `path` does not end with `.js` or `.ts`.
+  - `loaderType` must always be returned by `ScriptHost`.
   - Example: Markdown script hosts can return extracted JS code with `loaderType: "js"`.
 - `listFiles(root: string): Promise<string[]>`
   - Returns **only script paths** to be loaded by core.

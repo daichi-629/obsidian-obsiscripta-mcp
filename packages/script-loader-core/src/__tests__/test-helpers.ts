@@ -60,7 +60,10 @@ export class MockScriptHost implements ScriptHost {
 		if (!file) {
 			throw new Error(`File not found: ${path}`);
 		}
-		return file;
+		return {
+			...file,
+			loaderType: path.endsWith(".ts") ? "ts" : "js",
+		};
 	}
 
 	async listFiles(root: string): Promise<string[]> {

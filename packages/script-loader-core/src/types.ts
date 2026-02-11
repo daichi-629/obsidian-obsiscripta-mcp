@@ -6,8 +6,8 @@ export interface FileInfo {
 	contents: string;
 	/** Last modification time (Unix timestamp in milliseconds) */
 	mtime: number;
-	/** Optional explicit loader type for this source (e.g. virtualized markdown script blocks) */
-	loaderType?: ScriptLoaderType;
+	/** Explicit loader type for this source (owned by ScriptHost implementation) */
+	loaderType: ScriptLoaderType;
 }
 
 /**
@@ -33,7 +33,7 @@ export interface WatchHandlers {
  */
 export interface ScriptHost {
 	/**
-	 * Read a file and return its contents and modification time
+	 * Read a script and return source, loader type, and modification time
 	 */
 	readFile(path: string): Promise<FileInfo>;
 
