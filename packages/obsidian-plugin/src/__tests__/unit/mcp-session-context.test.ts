@@ -3,6 +3,20 @@ import { handleMCPToolsCall } from "../../mcp/mcp-api";
 import { ToolRegistry } from "../../mcp/tools/registry";
 import type { MCPToolDefinition } from "../../mcp/tools/types";
 
+
+function getFirstText(content: unknown[]): string | undefined {
+	const first = content[0];
+	if (!first || typeof first !== "object" || !("type" in first) || first.type !== "text") {
+		return undefined;
+	}
+
+	if (!("text" in first) || typeof first.text !== "string") {
+		return undefined;
+	}
+
+	return first.text;
+}
+
 function createTool(handler: MCPToolDefinition["handler"]): MCPToolDefinition {
 	return {
 		name: "session_tool",
@@ -41,7 +55,7 @@ describe("MCP session context", () => {
 			"session-a"
 		);
 
-		expect(response.result.content[0]?.text).toBe("1");
+		expect(getFirstText(response.result.content)).toBe("1");
 	});
 
 	it("persists data by session id across calls", async () => {
@@ -82,8 +96,8 @@ describe("MCP session context", () => {
 			"session-c"
 		);
 
-		expect(first.result.content[0]?.text).toBe("1");
-		expect(second.result.content[0]?.text).toBe("2");
-		expect(otherSession.result.content[0]?.text).toBe("1");
+		expect(getFirstText(first.result.content)).toBe("1");
+		expect(getFirstText(second.result.content)).toBe("2");
+		expect(getFirstText(otherSession.result.content)).toBe("1");
 	});
 });
