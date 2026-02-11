@@ -13,6 +13,7 @@ import {
 } from "./mcp-api";
 import { deleteSessionStore } from "./tools/session-store";
 import { isJSONRPCNotification, isJSONRPCRequest, isJSONRPCResponse, JSONRPCResponse } from "./mcp-types";
+import type { JSONRPCRequest } from "./mcp-types";
 
 interface SSEEvent {
 	id: string;
@@ -76,15 +77,6 @@ export class BridgeServer {
 		return token.trim();
 	}
 
-	private isInitializeRequest(body: unknown): boolean {
-		if (typeof body !== "object" || body === null) {
-			return false;
-		}
-
-		const payload = body as { method?: unknown };
-		return payload.method === "initialize";
-	}
-
 	private createSessionId(): string {
 		return randomUUID();
 	}
@@ -99,6 +91,11 @@ export class BridgeServer {
 			supportsJson: value.includes("application/json") || value.includes("*/*"),
 			supportsSSE: value.includes("text/event-stream") || value.includes("*/*"),
 		};
+	}
+
+	private hasRequiredPostAcceptHeader(accept: string | undefined): boolean {
+		const { supportsJson, supportsSSE } = this.parseAcceptHeader(accept);
+		return supportsJson && supportsSSE;
 	}
 
 	private createSSEEvent(streamId: string, sequence: number, data: string, retryMs?: number): SSEEvent {
@@ -438,16 +435,17 @@ export class BridgeServer {
 
 		// MCP Standard HTTP endpoint (JSON-RPC over HTTP)
 		app.post("/mcp", async (c) => {
-			const { supportsJson, supportsSSE } = this.parseAcceptHeader(c.req.header("accept"));
-			if (!supportsJson && !supportsSSE) {
+			if (!this.hasRequiredPostAcceptHeader(c.req.header("accept"))) {
 				return c.json(
 					{
 						error: "Not Acceptable",
-						message: "Accept header must include application/json or text/event-stream",
+						message: "Accept header must include both application/json and text/event-stream",
 					},
 					406,
 				);
 			}
+
+			const { supportsSSE } = this.parseAcceptHeader(c.req.header("accept"));
 
 			// Parse request body
 			let body: unknown;
@@ -455,6 +453,24 @@ export class BridgeServer {
 				body = await c.req.json();
 			} catch {
 				const errorResponse = createParseErrorResponse();
+				return c.json(errorResponse, 400);
+			}
+
+			// Parse JSON-RPC message
+			const parsed = parseJSONRPCMessage(body);
+			if (parsed instanceof Error) {
+				const errorResponse = createInvalidRequestResponse(
+					parsed.message
+				);
+				return c.json(errorResponse, 400);
+			}
+
+			if (isJSONRPCNotification(parsed) || isJSONRPCResponse(parsed)) {
+				return c.body(null, 202);
+			}
+
+			if (!isJSONRPCRequest(parsed)) {
+				const errorResponse = createInvalidRequestResponse("Unsupported JSON-RPC message type");
 				return c.json(errorResponse, 400);
 			}
 
@@ -482,7 +498,8 @@ export class BridgeServer {
 				);
 			}
 
-			const isInitialize = this.isInitializeRequest(body);
+			const request = parsed as JSONRPCRequest;
+			const isInitialize = request.method === "initialize";
 			if (!isInitialize && !providedSessionId) {
 				return c.json(
 					{
@@ -502,26 +519,6 @@ export class BridgeServer {
 					400,
 				);
 			}
-
-			// Parse JSON-RPC message
-			const parsed = parseJSONRPCMessage(body);
-			if (parsed instanceof Error) {
-				const errorResponse = createInvalidRequestResponse(
-					parsed.message
-				);
-				return c.json(errorResponse, 400);
-			}
-
-			if (isJSONRPCNotification(parsed) || isJSONRPCResponse(parsed)) {
-				return c.body(null, 202);
-			}
-
-			if (!isJSONRPCRequest(parsed)) {
-				const errorResponse = createInvalidRequestResponse("Unsupported JSON-RPC message type");
-				return c.json(errorResponse, 400);
-			}
-
-			const request = parsed;
 
 			// Handle the request
 			try {

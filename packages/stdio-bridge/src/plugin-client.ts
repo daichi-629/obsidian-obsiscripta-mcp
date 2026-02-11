@@ -468,9 +468,10 @@ export class PluginClient {
 		params: unknown,
 		sessionId: string | null
 	): Promise<{ response: JSONRPCResponse; headers: Headers }> {
+		const requestId = this.requestId++;
 		const body = {
 			jsonrpc: "2.0" as const,
-			id: this.requestId++,
+			id: requestId,
 			method,
 			params,
 		};
@@ -480,7 +481,7 @@ export class PluginClient {
 			headers["MCP-Session-Id"] = sessionId;
 		}
 
-		return this.fetchMcpJsonRpc(this.mcpBaseUrl, body, this.apiKey, headers);
+		return this.fetchMcpJsonRpc(this.mcpBaseUrl, body, requestId, this.apiKey, headers);
 	}
 
 	private async v1Request<T>(
@@ -492,40 +493,50 @@ export class PluginClient {
 		return response;
 	}
 
-	private parseSSEData(raw: string): JSONRPCResponse {
-		let latestDataLine: string | null = null;
+	private parseSSEData(raw: string, expectedId: number): JSONRPCResponse {
 		const events = raw.split("\n\n");
 		for (const event of events) {
 			const dataLines = event
 				.split("\n")
 				.filter((line) => line.startsWith("data:"))
 				.map((line) => line.slice(5).trimStart());
-			if (dataLines.length > 0) {
-				const data = dataLines.join("\n");
-				if (data.length > 0) {
-					latestDataLine = data;
-				}
+			if (dataLines.length === 0) {
+				continue;
+			}
+
+			const data = dataLines.join("\n").trim();
+			if (!data) {
+				continue;
+			}
+
+			let message: unknown;
+			try {
+				message = JSON.parse(data) as unknown;
+			} catch {
+				continue;
+			}
+
+			if (typeof message !== "object" || message === null || !("id" in message)) {
+				continue;
+			}
+
+			const candidate = message as { id?: unknown };
+			if (candidate.id === expectedId) {
+				return message as JSONRPCResponse;
 			}
 		}
 
-		if (!latestDataLine) {
-			throw new PluginClientError("SSE stream did not include a JSON-RPC message", 502, "INVALID_MCP_RESPONSE");
-		}
-
-		try {
-			return JSON.parse(latestDataLine) as JSONRPCResponse;
-		} catch (error) {
-			throw new PluginClientError(
-				`Invalid SSE JSON response: ${error instanceof Error ? error.message : String(error)}`,
-				502,
-				"INVALID_JSON"
-			);
-		}
+		throw new PluginClientError(
+			`SSE stream did not include JSON-RPC response for request id ${expectedId}`,
+			502,
+			"INVALID_MCP_RESPONSE"
+		);
 	}
 
 	private async fetchMcpJsonRpc(
 		url: string,
 		body: unknown,
+		expectedId: number,
 		apiKey: string,
 		extraHeaders: Record<string, string> = {}
 	): Promise<{ response: JSONRPCResponse; headers: Headers }> {
@@ -554,7 +565,7 @@ export class PluginClient {
 			let data: unknown = {};
 			if (text) {
 				if (contentType.includes("text/event-stream")) {
-					data = this.parseSSEData(text);
+					data = this.parseSSEData(text, expectedId);
 				} else {
 					data = JSON.parse(text) as unknown;
 				}

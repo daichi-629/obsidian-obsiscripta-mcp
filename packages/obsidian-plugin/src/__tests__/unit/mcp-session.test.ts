@@ -29,7 +29,7 @@ describe("BridgeServer MCP session management", () => {
 			headers: {
 				"Content-Type": "application/json",
 				"X-ObsiScripta-Api-Key": "test-api-key",
-				Accept: "application/json",
+				Accept: "application/json, text/event-stream",
 			},
 			body: JSON.stringify({
 				jsonrpc: "2.0",
@@ -53,7 +53,7 @@ describe("BridgeServer MCP session management", () => {
 			headers: {
 				"Content-Type": "application/json",
 				"X-ObsiScripta-Api-Key": "test-api-key",
-				Accept: "application/json",
+				Accept: "application/json, text/event-stream",
 			},
 			body: JSON.stringify({
 				jsonrpc: "2.0",
@@ -76,7 +76,7 @@ describe("BridgeServer MCP session management", () => {
 			headers: {
 				"Content-Type": "application/json",
 				"X-ObsiScripta-Api-Key": "test-api-key",
-				Accept: "application/json",
+				Accept: "application/json, text/event-stream",
 			},
 			body: JSON.stringify({
 				jsonrpc: "2.0",
@@ -94,7 +94,7 @@ describe("BridgeServer MCP session management", () => {
 				"Content-Type": "application/json",
 				"X-ObsiScripta-Api-Key": "test-api-key",
 				"MCP-Session-Id": sessionId as string,
-				Accept: "application/json",
+				Accept: "application/json, text/event-stream",
 			},
 			body: JSON.stringify({
 				jsonrpc: "2.0",
@@ -110,7 +110,7 @@ describe("BridgeServer MCP session management", () => {
 			headers: {
 				"X-ObsiScripta-Api-Key": "test-api-key",
 				"MCP-Session-Id": sessionId as string,
-				Accept: "application/json",
+				Accept: "application/json, text/event-stream",
 			},
 		});
 		expect(deleteResponse.status).toBe(204);
@@ -121,7 +121,7 @@ describe("BridgeServer MCP session management", () => {
 				"Content-Type": "application/json",
 				"X-ObsiScripta-Api-Key": "test-api-key",
 				"MCP-Session-Id": sessionId as string,
-				Accept: "application/json",
+				Accept: "application/json, text/event-stream",
 			},
 			body: JSON.stringify({
 				jsonrpc: "2.0",
@@ -143,7 +143,7 @@ describe("BridgeServer MCP session management", () => {
 			headers: {
 				"Content-Type": "application/json",
 				"X-ObsiScripta-Api-Key": "test-api-key",
-				Accept: "application/json",
+				Accept: "application/json, text/event-stream",
 			},
 			body: JSON.stringify({
 				jsonrpc: "2.0",
@@ -172,6 +172,30 @@ describe("BridgeServer MCP session management", () => {
 
 		expect(response.status).toBe(202);
 		expect(await response.text()).toBe("");
+	});
+
+
+	it("rejects POST /mcp when Accept does not include both JSON and SSE", async () => {
+		const server = createBridgeServer();
+		// @ts-expect-error private field access for integration-style test
+		const app = server.app;
+
+		const response = await app.request("/mcp", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-ObsiScripta-Api-Key": "test-api-key",
+				Accept: "application/json",
+			},
+			body: JSON.stringify({
+				jsonrpc: "2.0",
+				id: 300,
+				method: "initialize",
+				params: {},
+			}),
+		});
+
+		expect(response.status).toBe(406);
 	});
 
 	it("returns SSE stream when POST accepts text/event-stream", async () => {
