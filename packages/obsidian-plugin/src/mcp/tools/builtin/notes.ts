@@ -15,7 +15,6 @@ interface MarkdownHeading {
 	lineNumber: number;
 	level: number;
 	text: string;
-	headerLine: string;
 }
 
 function parseObsidianLink(rawLink: string): ObsidianLinkParts {
@@ -84,7 +83,6 @@ function parseMarkdownHeading(line: string, lineIndex: number): MarkdownHeading 
 		lineNumber: lineIndex + 1,
 		level: hashPrefix.length,
 		text,
-		headerLine: line
 	};
 }
 
@@ -122,10 +120,34 @@ function extractSectionContent(
 
 	const baseContentLines = includeSubsections
 		? contentLines
-		: contentLines.filter((line) => {
-			const heading = parseMarkdownHeading(line, 0);
-			return heading === null;
-		});
+		: (() => {
+			const filteredLines: string[] = [];
+			let skippedSubsectionLevel: number | null = null;
+
+			for (const line of contentLines) {
+				const heading = parseMarkdownHeading(line, 0);
+				if (!heading) {
+					if (skippedSubsectionLevel === null) {
+						filteredLines.push(line);
+					}
+					continue;
+				}
+
+				if (skippedSubsectionLevel !== null && heading.level > skippedSubsectionLevel) {
+					continue;
+				}
+
+				if (heading.level > selected.level) {
+					skippedSubsectionLevel = heading.level;
+					continue;
+				}
+
+				skippedSubsectionLevel = null;
+				filteredLines.push(line);
+			}
+
+			return filteredLines;
+		})();
 
 	let output = "";
 	if (mode === "header") {
@@ -182,7 +204,7 @@ export const readNoteTool: MCPToolDefinition = {
 			},
 			include_subsections: {
 				type: "boolean",
-				description: "When true, include subsection headings/content. When false, subsection heading lines are excluded.",
+				description: "When true, include subsection headings/content. When false, subsection headings and their body content are excluded.",
 				default: true
 			},
 			max_chars: {

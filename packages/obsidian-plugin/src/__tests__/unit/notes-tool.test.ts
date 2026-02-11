@@ -88,9 +88,42 @@ describe("read_note tool", () => {
 			JSON.stringify({
 				title: "Entry",
 				level: 1,
-				content: "Today\nChild",
+				content: "Today",
 				start_line: 1,
 				end_line: 4,
+				truncated: false,
+			}, null, 2),
+		);
+	});
+
+	it("omits nested subsection content when include_subsections=false", async () => {
+		const sourceFile = createTFile("Notes/Nested.md", "Nested");
+		const context = {
+			vault: {
+				getAbstractFileByPath: vi.fn().mockReturnValue(sourceFile),
+				read: vi.fn().mockResolvedValue("# Root\nTop\n## Child\nInner\n### Grandchild\nDeep\nBack"),
+			},
+			app: {
+				metadataCache: {
+					getFirstLinkpathDest: vi.fn(),
+				},
+			},
+		} as any;
+
+		const result = await readNoteTool.handler({
+			path: "Notes/Nested",
+			section: "Root",
+			mode: "content",
+			include_subsections: false,
+		}, context);
+		expect(result.isError).toBeUndefined();
+		expect(result.content[0]?.text).toBe(
+			JSON.stringify({
+				title: "Root",
+				level: 1,
+				content: "Top",
+				start_line: 1,
+				end_line: 7,
 				truncated: false,
 			}, null, 2),
 		);
