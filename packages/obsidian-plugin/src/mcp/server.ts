@@ -10,6 +10,7 @@ import {
 	createParseErrorResponse,
 	createInvalidRequestResponse,
 } from "./mcp-api";
+import { MCPSessionStore } from "./session-store";
 
 export class BridgeServer {
 	private static readonly MAX_BODY_BYTES = 1024 * 1024;
@@ -21,6 +22,7 @@ export class BridgeServer {
 	private port: number;
 	private host: string;
 	private app: Hono;
+	private readonly mcpSessions = new MCPSessionStore();
 
 	constructor(
 		executor: ToolExecutor,
@@ -180,6 +182,7 @@ export class BridgeServer {
 				origin: "*",
 				allowMethods: ["GET", "POST", "OPTIONS"],
 				allowHeaders: ["Content-Type", "Mcp-Session-Id", "Authorization", "X-ObsiScripta-Api-Key"],
+				exposeHeaders: ["Mcp-Session-Id"],
 			}),
 		);
 
@@ -238,6 +241,8 @@ export class BridgeServer {
 
 		// MCP Standard HTTP endpoint (JSON-RPC over HTTP)
 		app.post("/mcp", async (c) => {
+			const existingSessionId = c.req.header("mcp-session-id");
+
 			// Parse request body
 			let body: unknown;
 			try {
@@ -257,6 +262,58 @@ export class BridgeServer {
 			}
 
 			const request = parsed;
+			const isInitialize = request.method === "initialize";
+
+			if (isInitialize && existingSessionId) {
+				return c.json(
+					{
+						jsonrpc: "2.0",
+						id: request.id,
+						error: {
+							code: -32000,
+							message:
+								"Bad Request: initialize requests must not include mcp-session-id",
+						},
+					},
+					400
+				);
+			}
+
+			if (!isInitialize) {
+				if (!existingSessionId) {
+					return c.json(
+						{
+							jsonrpc: "2.0",
+							id: request.id,
+							error: {
+								code: -32000,
+								message: "Bad Request: No valid session found",
+							},
+						},
+						400
+					);
+				}
+
+				const session = this.mcpSessions.touch(existingSessionId);
+				if (!session) {
+					return c.json(
+						{
+							jsonrpc: "2.0",
+							id: request.id,
+							error: {
+								code: -32000,
+								message: "Bad Request: No valid session found",
+							},
+						},
+						400
+					);
+				}
+			}
+
+			let sessionIdToReturn: string | undefined;
+			if (isInitialize) {
+				sessionIdToReturn = this.mcpSessions.create().sessionId;
+			}
 
 			// Handle the request
 			try {
@@ -268,6 +325,12 @@ export class BridgeServer {
 
 				// For Phase 1, we return application/json (no SSE streaming)
 				// Phase 2+ will add SSE support when needed
+				if (sessionIdToReturn) {
+					c.header("mcp-session-id", sessionIdToReturn);
+				}
+				if (existingSessionId) {
+					c.header("mcp-session-id", existingSessionId);
+				}
 				return c.json(response, 200);
 			} catch (error) {
 				console.error("[Bridge] Error handling MCP request:", error);
@@ -287,6 +350,25 @@ export class BridgeServer {
 					500
 				);
 			}
+		});
+
+		app.delete("/mcp", (c) => {
+			const sessionId = c.req.header("mcp-session-id");
+			if (!sessionId || !this.mcpSessions.delete(sessionId)) {
+				return c.json(
+					{
+						jsonrpc: "2.0",
+						id: null,
+						error: {
+							code: -32000,
+							message: "Bad Request: No valid session found",
+						},
+					},
+					400
+				);
+			}
+
+			return c.body(null, 204);
 		});
 
 		// 404 handler

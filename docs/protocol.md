@@ -396,13 +396,18 @@ curl -s -X POST http://127.0.0.1:3000/mcp \
 
 ### Session Management
 
-Session management with `Mcp-Session-Id` header is planned for Phase 3 of the
-migration. Currently, the endpoint operates in a stateless mode.
+`/mcp` now uses stateful sessions via the `Mcp-Session-Id` header.
 
-### Current Limitations (Phase 1)
+- Start a session by sending `initialize` without `Mcp-Session-Id`.
+- The server returns `Mcp-Session-Id` in response headers.
+- Subsequent `tools/list` and `tools/call` requests must include that session ID.
+- Unknown/expired/missing sessions return JSON-RPC error `-32000` with HTTP 400.
+- `DELETE /mcp` with `Mcp-Session-Id` closes a session.
+
+### Current Limitations (Phase 3 foundation)
 
 - No SSE streaming support (returns single JSON response)
-- No session management (`Mcp-Session-Id` header not yet supported)
+- Session state is transport-level only (tool-level shared state injection is future work)
 - No pagination support for tools/list
 - No server-initiated requests or notifications
 

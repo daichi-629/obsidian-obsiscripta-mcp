@@ -17,6 +17,16 @@ async function startFakeServer(
   };
 }
 
+
+async function parseJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  const text = Buffer.concat(chunks).toString('utf8');
+  return text ? (JSON.parse(text) as Record<string, unknown>) : {};
+}
+
 const cleanup: Array<() => Promise<void>> = [];
 afterEach(async () => {
   while (cleanup.length > 0) {
@@ -31,19 +41,20 @@ describe('PluginClient Fake HTTP fallback E2E', () => {
   it('sends MCP API key header on MCP requests', async () => {
     let receivedApiKey: string | undefined;
 
-    const fake = await startFakeServer((req, res) => {
+    const fake = await startFakeServer(async (req, res) => {
       if (req.method === 'POST' && req.url === '/mcp') {
         receivedApiKey = req.headers['x-obsiscripta-api-key'] as string | undefined;
+        const body = await parseJsonBody(req);
         res.setHeader('content-type', 'application/json');
-        res.end(
-          JSON.stringify({
-            jsonrpc: '2.0',
-            id: 1,
-            result: {
-              tools: [],
-            },
-          }),
-        );
+
+        if (body.method === 'initialize') {
+          res.setHeader('mcp-session-id', 'session-1');
+          res.end(JSON.stringify({ jsonrpc: '2.0', id: body.id, result: { capabilities: {} } }));
+          return;
+        }
+
+        res.setHeader('mcp-session-id', 'session-1');
+        res.end(JSON.stringify({ jsonrpc: '2.0', id: body.id, result: { tools: [] } }));
         return;
       }
 
@@ -64,7 +75,7 @@ describe('PluginClient Fake HTTP fallback E2E', () => {
   });
 
   it('falls back from MCP to v1 listTools in auto transport mode', async () => {
-    const fake = await startFakeServer((req, res) => {
+    const fake = await startFakeServer(async (req, res) => {
       if (req.method === 'POST' && req.url === '/mcp') {
         res.statusCode = 502;
         res.end(JSON.stringify({ error: 'mcp down', message: 'mcp down' }));
@@ -103,7 +114,7 @@ describe('PluginClient Fake HTTP fallback E2E', () => {
   it('does not fallback to v1 when transportMode is mcp', async () => {
     let v1ToolsRequests = 0;
 
-    const fake = await startFakeServer((req, res) => {
+    const fake = await startFakeServer(async (req, res) => {
       if (req.method === 'POST' && req.url === '/mcp') {
         res.statusCode = 502;
         res.end(JSON.stringify({ error: 'mcp down', message: 'mcp down' }));
@@ -133,7 +144,7 @@ describe('PluginClient Fake HTTP fallback E2E', () => {
   it('falls back to v1 without sending MCP API key to v1 endpoint', async () => {
     let v1ApiKeyHeader: string | undefined;
 
-    const fake = await startFakeServer((req, res) => {
+    const fake = await startFakeServer(async (req, res) => {
       if (req.method === 'POST' && req.url === '/mcp') {
         res.statusCode = 401;
         res.end(JSON.stringify({ error: 'Unauthorized', message: 'Unauthorized' }));

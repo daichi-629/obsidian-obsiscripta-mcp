@@ -82,6 +82,7 @@ export class PluginClient {
 	private preferredTransport: "mcp" | "v1";
 	private fallbackCount = 0;
 	private requestId = 1;
+	private mcpSessionId: string | null = null;
 
 	constructor(config?: Partial<PluginClientConfig>) {
 		const mergedConfig = {
@@ -389,35 +390,121 @@ export class PluginClient {
 	}
 
 	private async mcpRequest<T>(method: string, params: unknown): Promise<T> {
+		if (method !== "initialize") {
+			await this.ensureMcpSession();
+		}
+
+		const execute = async (): Promise<T> => {
+			const body = {
+				jsonrpc: "2.0" as const,
+				id: this.requestId++,
+				method,
+				params,
+			};
+
+			const { data, headers } = await this.fetchJsonWithHeaders<JSONRPCResponse>(
+				this.mcpBaseUrl,
+				"POST",
+				body,
+				this.apiKey,
+				this.mcpSessionId ?? undefined
+			);
+
+			const returnedSessionId = headers.get("mcp-session-id");
+			if (returnedSessionId) {
+				this.mcpSessionId = returnedSessionId;
+			}
+
+			if ("error" in data) {
+				const error = (data as JSONRPCErrorResponse).error;
+				throw new PluginClientError(
+					`MCP error ${error.code}: ${error.message}`,
+					502,
+					"MCP_ERROR",
+					{ mcpError: error, data: error.data }
+				);
+			}
+			if (!("result" in data)) {
+				throw new PluginClientError(
+					"MCP response missing result",
+					502,
+					"INVALID_MCP_RESPONSE"
+				);
+			}
+			return data.result as T;
+		};
+
+		try {
+			return await execute();
+		} catch (error) {
+			if (!this.isInvalidSessionError(error)) {
+				throw error;
+			}
+
+			this.mcpSessionId = null;
+			await this.ensureMcpSession();
+			return execute();
+		}
+	}
+
+	private async ensureMcpSession(): Promise<void> {
+		if (this.mcpSessionId) {
+			return;
+		}
+
 		const body = {
 			jsonrpc: "2.0" as const,
 			id: this.requestId++,
-			method,
-			params,
+			method: "initialize",
+			params: {
+				protocolVersion: "2025-03-26",
+				capabilities: {},
+				clientInfo: {
+					name: "obsidian-mcp-bridge",
+					version: "0.2.0",
+				},
+			},
 		};
-		const response = await this.fetchJson<JSONRPCResponse>(
+
+		const { data, headers } = await this.fetchJsonWithHeaders<JSONRPCResponse>(
 			this.mcpBaseUrl,
 			"POST",
 			body,
 			this.apiKey
 		);
-		if ("error" in response) {
-			const error = (response as JSONRPCErrorResponse).error;
+
+		if ("error" in data) {
+			const error = (data as JSONRPCErrorResponse).error;
 			throw new PluginClientError(
-				`MCP error ${error.code}: ${error.message}`,
+				`MCP initialize error ${error.code}: ${error.message}`,
 				502,
 				"MCP_ERROR",
 				{ mcpError: error, data: error.data }
 			);
 		}
-		if (!("result" in response)) {
+
+		const sessionId = headers.get("mcp-session-id");
+		if (!sessionId) {
 			throw new PluginClientError(
-				"MCP response missing result",
+				"MCP initialize response missing mcp-session-id header",
 				502,
 				"INVALID_MCP_RESPONSE"
 			);
 		}
-		return response.result as T;
+
+		this.mcpSessionId = sessionId;
+	}
+
+	private isInvalidSessionError(error: unknown): boolean {
+		if (!(error instanceof PluginClientError)) {
+			return false;
+		}
+		if (error.statusCode !== 400) {
+			return false;
+		}
+
+		const details = error.details as { mcpError?: { message?: string } } | undefined;
+		return details?.mcpError?.message === "Bad Request: No valid session found";
 	}
 
 	private async v1Request<T>(
@@ -434,6 +521,17 @@ export class PluginClient {
 		body?: unknown,
 		apiKey: string = ""
 	): Promise<T> {
+		const { data } = await this.fetchJsonWithHeaders<T>(url, method, body, apiKey);
+		return data;
+	}
+
+	private async fetchJsonWithHeaders<T>(
+		url: string,
+		method: "GET" | "POST",
+		body?: unknown,
+		apiKey: string = "",
+		sessionId?: string
+	): Promise<{ data: T; headers: Headers }> {
 		const controller = new AbortController();
 		const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
@@ -444,6 +542,9 @@ export class PluginClient {
 			};
 			if (apiKey) {
 				headers["X-ObsiScripta-Api-Key"] = apiKey;
+			}
+			if (sessionId) {
+				headers["Mcp-Session-Id"] = sessionId;
 			}
 
 			const response = await fetch(url, {
@@ -466,7 +567,7 @@ export class PluginClient {
 				);
 			}
 
-			return data as T;
+			return { data: data as T, headers: response.headers };
 		} catch (error) {
 			if (error instanceof PluginClientError) {
 				throw error;

@@ -163,6 +163,24 @@ export async function handleMCPRequest(
 	context: AppContext
 ): Promise<JSONRPCResponse> {
 	switch (request.method) {
+		case "initialize":
+			return {
+				jsonrpc: "2.0",
+				id: request.id,
+				result: {
+					protocolVersion: "2025-03-26",
+					capabilities: {
+						tools: {
+							listChanged: true,
+						},
+					},
+					serverInfo: {
+						name: "obsiscripta-bridge-plugin",
+						version: "0.2.0",
+					},
+				},
+			};
+
 		case "tools/list":
 			return handleMCPToolsList(request as ToolsListRequest, registry);
 
