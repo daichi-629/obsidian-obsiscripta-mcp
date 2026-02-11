@@ -15,7 +15,7 @@ function createBridgeServer(): BridgeServer {
 		executeToolCall: async () => ({ content: [] }),
 	};
 
-	return new BridgeServer(mockExecutor as never, 3000, "127.0.0.1", true, ["test-api-key"]);
+	return new BridgeServer(mockExecutor as never, 3000, "127.0.0.1", ["test-api-key"]);
 }
 
 describe("BridgeServer MCP session management", () => {

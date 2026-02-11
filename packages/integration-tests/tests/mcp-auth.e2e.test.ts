@@ -36,7 +36,7 @@ afterEach(async () => {
 });
 
 describe('BridgeServer MCP authentication E2E', () => {
-  it('requires API key for /mcp and keeps /bridge/v1 unauthenticated', async () => {
+  it('requires API key for /mcp', async () => {
     const toolRegistry = new ToolRegistry();
     toolRegistry.register(
       {
@@ -62,7 +62,7 @@ describe('BridgeServer MCP authentication E2E', () => {
 
     const port = await getFreePort();
     const apiKey = 'obsi_test_key';
-    const server = new BridgeServer(executor, port, '127.0.0.1', true, [apiKey]);
+    const server = new BridgeServer(executor, port, '127.0.0.1', [apiKey]);
     await server.start();
     cleanup.push(() => server.stop());
 
@@ -109,10 +109,5 @@ describe('BridgeServer MCP authentication E2E', () => {
       body: JSON.stringify({ jsonrpc: '2.0', id: 4, method: 'tools/list', params: {} }),
     });
     expect(validAuthResponse.status).toBe(200);
-
-    const v1ToolsResponse = await fetch(`${baseUrl}/bridge/v1/tools`);
-    expect(v1ToolsResponse.status).toBe(200);
-    const v1Tools = (await v1ToolsResponse.json()) as { tools?: Array<{ name: string }> };
-    expect(v1Tools.tools?.some((tool) => tool.name === 'echo')).toBe(true);
   });
 });

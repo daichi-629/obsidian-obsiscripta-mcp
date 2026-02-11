@@ -49,7 +49,6 @@ describe("BridgeController - Settings Integration", () => {
 				autoStart: settings.autoStart,
 				port: settings.port,
 				bindHost: settings.bindHost,
-				enableBridgeV1: settings.enableBridgeV1,
 				mcpApiKeys: [...settings.mcpApiKeys],
 			},
 			mockToolRegistry
@@ -63,7 +62,6 @@ describe("BridgeController - Settings Integration", () => {
 			autoStart: settings.autoStart,
 			port: settings.port,
 			bindHost: settings.bindHost,
-			enableBridgeV1: settings.enableBridgeV1,
 			mcpApiKeys: [...settings.mcpApiKeys],
 		};
 		mockBridgeServer.isRunning.mockReturnValue(true);
@@ -93,15 +91,7 @@ describe("BridgeController - Settings Integration", () => {
 			expect(bridgeController.needsRestart()).toBe(true);
 		});
 
-		it("should detect when enableBridgeV1 changes", async () => {
-			bridgeController.subscribeToSettings(settingsStore);
-
-			await settingsStore.updateSetting("enableBridgeV1", false);
-
-			expect(bridgeController.needsRestart()).toBe(true);
-		});
-
-		it("should detect when mcpApiKeys change", async () => {
+				it("should detect when mcpApiKeys change", async () => {
 			bridgeController.subscribeToSettings(settingsStore);
 
 			await settingsStore.issueMcpApiKey();
@@ -147,8 +137,7 @@ describe("BridgeController - Settings Integration", () => {
 
 			await settingsStore.updateSetting("port", 4000);
 			await settingsStore.updateSetting("bindHost", "0.0.0.0");
-			await settingsStore.updateSetting("enableBridgeV1", false);
-
+			
 			expect(bridgeController.needsRestart()).toBe(true);
 		});
 
@@ -178,7 +167,6 @@ describe("BridgeController - Settings Integration", () => {
 					autoStart: settings.autoStart,
 					port: settings.port,
 					bindHost: settings.bindHost,
-					enableBridgeV1: settings.enableBridgeV1,
 					mcpApiKeys: [...settings.mcpApiKeys],
 				},
 				mockToolRegistry
@@ -191,7 +179,6 @@ describe("BridgeController - Settings Integration", () => {
 				autoStart: settings.autoStart,
 				port: settings.port,
 				bindHost: settings.bindHost,
-				enableBridgeV1: settings.enableBridgeV1,
 				mcpApiKeys: [...settings.mcpApiKeys],
 			};
 
