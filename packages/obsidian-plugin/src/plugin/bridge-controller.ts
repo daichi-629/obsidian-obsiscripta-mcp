@@ -3,6 +3,7 @@ import { BridgeServer } from "../mcp/server";
 import { ToolRegistry } from "../mcp/tools/registry";
 import { ToolExecutor } from "../mcp/tools/executor";
 import { AppContext } from "./context";
+import { createSessionContext } from "../mcp/session-store";
 import { SettingsStore } from "../settings/settings-store";
 import { EventRef } from "../settings/setting-store-base";
 
@@ -74,6 +75,7 @@ export class BridgeController {
 		const toolContext: AppContext = {
 			vault: this.vault,
 			app: this.app,
+			session: createSessionContext("bridge-v1-default"),
 		};
 		const executor = new ToolExecutor(this.toolRegistry, toolContext);
 		this.server = new BridgeServer(
