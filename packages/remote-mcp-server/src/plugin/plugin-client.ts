@@ -52,18 +52,20 @@ export class PluginClient {
 		return this.request<HealthResponse>("GET", "/health");
 	}
 
-	async listTools(): Promise<ToolListResponse> {
-		return this.request<ToolListResponse>("GET", "/tools");
+	async listTools(sessionId?: string): Promise<ToolListResponse> {
+		return this.request<ToolListResponse>("GET", "/tools", undefined, sessionId);
 	}
 
 	async callTool(
 		toolName: string,
-		args: Record<string, unknown> = {}
+		args: Record<string, unknown> = {},
+		sessionId?: string
 	): Promise<ToolCallResponse> {
 		return this.request<ToolCallResponse>(
 			"POST",
 			`/tools/${encodeURIComponent(toolName)}/call`,
-			{ arguments: args }
+			{ arguments: args },
+			sessionId
 		);
 	}
 
@@ -79,7 +81,8 @@ export class PluginClient {
 	private async request<T>(
 		method: "GET" | "POST",
 		path: string,
-		body?: unknown
+		body?: unknown,
+		sessionId?: string
 	): Promise<T> {
 		const url = `${this.baseUrl}${path}`;
 		const controller = new AbortController();
@@ -94,6 +97,10 @@ export class PluginClient {
 			// Add auth token if authentication is required
 			if (this.requireAuth && this.token) {
 				headers["Authorization"] = `Bearer ${this.token}`;
+			}
+
+			if (sessionId) {
+				headers["MCP-Session-Id"] = sessionId;
 			}
 
 			const response = await fetch(url, {

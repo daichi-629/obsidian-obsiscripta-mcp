@@ -108,6 +108,7 @@ export class RemoteMcpServer {
 			ListToolsRequestSchema,
 			async () => {
 				const pluginClient = this.getCurrentPluginClient();
+				const sessionId = requestContext.getStore()?.sessionId;
 
 				if (!pluginClient) {
 					return {
@@ -116,7 +117,7 @@ export class RemoteMcpServer {
 				}
 
 				try {
-					const response = await pluginClient.listTools();
+					const response = await pluginClient.listTools(sessionId);
 					return {
 						tools: response.tools.map((tool: Tool) => ({
 							name: tool.name,
@@ -145,6 +146,7 @@ export class RemoteMcpServer {
 				try {
 					// Get the appropriate plugin client for this request
 					const pluginClient = this.getCurrentPluginClient();
+					const sessionId = requestContext.getStore()?.sessionId;
 
 					if (!pluginClient) {
 						return {
@@ -160,7 +162,8 @@ export class RemoteMcpServer {
 
 					const response = await pluginClient.callTool(
 						name,
-						args as Record<string, unknown>
+						args as Record<string, unknown>,
+						sessionId
 					);
 
 					return {

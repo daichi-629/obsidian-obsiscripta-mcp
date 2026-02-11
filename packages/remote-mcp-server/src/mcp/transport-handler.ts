@@ -94,13 +94,27 @@ export function createMcpTransportRoutes(
 			return transport.handleRequest(c.req.raw);
 		}
 
-		// Invalid or missing session
+		if (sessionId) {
+			return c.json(
+				{
+					jsonrpc: "2.0",
+					error: {
+						code: -32000,
+						message: "Not Found: Session expired or not found",
+					},
+					id: null,
+				},
+				404
+			);
+		}
+
+		// Missing session for non-initialize requests
 		return c.json(
 			{
 				jsonrpc: "2.0",
 				error: {
 					code: -32000,
-					message: "Bad Request: No valid session found",
+					message: "Bad Request: MCP-Session-Id header is required",
 				},
 				id: null,
 			},
