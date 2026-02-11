@@ -66,7 +66,7 @@ export class MockScriptHost implements ScriptHost {
 	async listFiles(root: string): Promise<string[]> {
 		const files: string[] = [];
 		for (const [path] of this.files) {
-			if (path.startsWith(root) && (path.endsWith(".js") || path.endsWith(".ts"))) {
+			if (path.startsWith(root)) {
 				files.push(path);
 			}
 		}

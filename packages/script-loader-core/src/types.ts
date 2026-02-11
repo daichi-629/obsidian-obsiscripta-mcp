@@ -6,6 +6,8 @@ export interface FileInfo {
 	contents: string;
 	/** Last modification time (Unix timestamp in milliseconds) */
 	mtime: number;
+	/** Optional explicit loader type for this source (e.g. virtualized markdown script blocks) */
+	loaderType?: ScriptLoaderType;
 }
 
 /**
@@ -36,7 +38,10 @@ export interface ScriptHost {
 	readFile(path: string): Promise<FileInfo>;
 
 	/**
-	 * List all script files (.js, .ts) recursively in a directory
+	 * List all script files recursively in a directory.
+	 *
+	 * The returned paths are treated as loadable scripts by the core.
+	 * Script selection rules are owned by the ScriptHost implementation.
 	 */
 	listFiles(root: string): Promise<string[]>;
 

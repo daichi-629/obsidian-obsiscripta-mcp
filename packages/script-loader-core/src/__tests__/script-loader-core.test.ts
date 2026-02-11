@@ -109,11 +109,13 @@ describe("ScriptLoaderCore - Desired Behavior", () => {
 			expect(logger.hasError()).toBe(false);
 		});
 
-		it("should skip non-script files", async () => {
-			// DESIRED: Only .js and .ts files are loaded
+		it("should allow hosts to define script-file rules via isScriptPath", async () => {
+			// DESIRED: Core trusts ScriptHost + optional callback filtering
 			scriptHost.setFile("mcp-tools/readme.md", "# Documentation", 1000);
 			scriptHost.setFile("mcp-tools/types.d.ts", "export type T = {};", 2000);
 			scriptHost.setFile("mcp-tools/tool.ts", "export default {};", 3000);
+
+			callbacks.isScriptPath = vi.fn((path) => path.endsWith(".ts"));
 
 			loader = createLoader();
 			await loader.start();
@@ -137,6 +139,22 @@ describe("ScriptLoaderCore - Desired Behavior", () => {
 			expect(registry.count()).toBe(1);
 			expect(registry.get("mcp-tools/tool.ts")).toBeDefined();
 			expect(registry.get("mcp-tools/_shared/utils.ts")).toBeUndefined();
+		});
+
+		it("should load scripts with host-provided loaderType for non-standard extensions", async () => {
+			// DESIRED: ScriptHost can surface virtual script sources (e.g. markdown code blocks)
+			scriptHost.setFile("mcp-tools/tool.md", "module.exports = { from: 'md' };", 1000);
+			const originalReadFile = scriptHost.readFile.bind(scriptHost);
+			vi.spyOn(scriptHost, "readFile").mockImplementation(async (path) => {
+				const info = await originalReadFile(path);
+				return { ...info, loaderType: "js" };
+			});
+
+			loader = createLoader();
+			await loader.start();
+
+			expect(registry.count()).toBe(1);
+			expect(registry.get("mcp-tools/tool.md")).toBeDefined();
 		});
 
 		it("should derive unique tool names from file paths", async () => {

@@ -161,8 +161,8 @@ export class ScriptLoaderCore {
 			relativePath = normalizedScriptPath.slice(normalizedScriptsPath.length + 1);
 		}
 
-		// Remove file extension (.js, .ts)
-		relativePath = relativePath.replace(/\.(js|ts)$/, "");
+		// Remove final file extension for stable tool names
+		relativePath = relativePath.replace(/\.[^/.]+$/, "");
 
 		return relativePath;
 	}
@@ -189,26 +189,10 @@ export class ScriptLoaderCore {
 	 */
 	private startWatching(): void {
 		this.watchDisposable = this.scriptHost.watch(this.scriptsPath, {
-			onCreate: (path) => {
-				if (this.isScriptPath(path)) {
-					this.scheduleReload();
-				}
-			},
-			onModify: (path) => {
-				if (this.isScriptPath(path)) {
-					this.scheduleReload();
-				}
-			},
-			onDelete: (path) => {
-				if (this.isScriptPath(path)) {
-					this.scheduleReload();
-				}
-			},
-			onRename: (newPath, oldPath) => {
-				if (this.isScriptPath(newPath) || this.isScriptPath(oldPath)) {
-					this.scheduleReload();
-				}
-			},
+			onCreate: () => this.scheduleReload(),
+			onModify: () => this.scheduleReload(),
+			onDelete: () => this.scheduleReload(),
+			onRename: () => this.scheduleReload(),
 		});
 	}
 
@@ -258,16 +242,13 @@ export class ScriptLoaderCore {
 	 * Load a single script
 	 */
 	private async loadScript(scriptPath: string): Promise<void> {
-		const loader = this.getLoaderForPath(scriptPath);
-		if (!loader) {
-			return;
-		}
 		if (this.callbacks.isScriptPath && !this.callbacks.isScriptPath(scriptPath)) {
 			return;
 		}
 
 		try {
 			const fileInfo = await this.scriptHost.readFile(scriptPath);
+			const loader = this.resolveLoaderType(scriptPath, fileInfo.loaderType);
 			const compiled = await this.compiler.compile(scriptPath, fileInfo.contents, loader, fileInfo.mtime);
 
 			// Load script using runtime
@@ -322,7 +303,11 @@ export class ScriptLoaderCore {
 	/**
 	 * Get the loader type for a file path
 	 */
-	private getLoaderForPath(filePath: string): ScriptLoaderType | null {
+	private resolveLoaderType(filePath: string, explicitLoaderType?: ScriptLoaderType): ScriptLoaderType {
+		if (explicitLoaderType) {
+			return explicitLoaderType;
+		}
+
 		const lowerPath = filePath.toLowerCase();
 		if (lowerPath.endsWith(".js")) {
 			return "js";
@@ -330,17 +315,7 @@ export class ScriptLoaderCore {
 		if (lowerPath.endsWith(".ts") && !lowerPath.endsWith(".d.ts")) {
 			return "ts";
 		}
-		return null;
-	}
 
-	/**
-	 * Check if a path is a script file
-	 */
-	private isScriptPath(filePath?: string): boolean {
-		if (!filePath) {
-			return false;
-		}
-		const lowerPath = filePath.toLowerCase();
-		return lowerPath.endsWith(".js") || (lowerPath.endsWith(".ts") && !lowerPath.endsWith(".d.ts"));
+		throw new Error(`Unable to determine loader type for: ${filePath}`);
 	}
 }

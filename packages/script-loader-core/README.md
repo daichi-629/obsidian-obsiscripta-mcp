@@ -18,26 +18,91 @@ This package provides the core logic for loading, compiling, and executing scrip
 
 The core depends on three key interfaces plus optional module resolution:
 
-### ScriptHost
-Abstracts file system operations:
-- `readFile(path)`: Read file contents and modification time
-- `listFiles(root)`: List all script files in a directory
-- `watch(root, handlers)`: Watch for file changes
+### `ScriptHost`
 
-### PathUtils
-Abstracts path operations:
-- `normalize(path)`: Normalize path separators
-- `isAbsolute(path)`: Check if path is absolute
-- `join(...paths)`: Join path segments
+`ScriptHost` is the boundary between the core loader and your file source (filesystem, vault, virtual store, etc).
 
-### Logger
-Abstracts logging:
-- `debug/info/warn/error`: Log at different levels
+```ts
+interface FileInfo {
+  contents: string;
+  mtime: number;
+  loaderType?: "js" | "ts";
+}
 
-### ModuleResolver (optional)
-Resolves and loads script modules for `require()`:
-- `resolve(fromId, request)`: Map a module request to an id and code
-- `load(resolution)`: Return the module source code
+interface ScriptHost {
+  readFile(path: string): Promise<FileInfo>;
+  listFiles(root: string): Promise<string[]>;
+  watch(root: string, handlers: WatchHandlers): Disposable;
+  exists(path: string): Promise<boolean>;
+  ensureDirectory(path: string): Promise<void>;
+}
+```
+
+- `readFile(path: string): Promise<FileInfo>`
+  - Reads a script path and returns source + metadata.
+  - `loaderType` is optional, but required when `path` does not end with `.js` or `.ts`.
+  - Example: Markdown script hosts can return extracted JS code with `loaderType: "js"`.
+- `listFiles(root: string): Promise<string[]>`
+  - Returns **only script paths** to be loaded by core.
+  - Extension filtering / script判定の責務は `ScriptHost` 側にあります。
+- `watch(root: string, handlers): Disposable`
+  - Starts directory watch and calls callbacks for create/modify/delete/rename.
+  - Returns a disposable watcher handle.
+- `exists(path: string): Promise<boolean>`
+  - Checks file/folder existence.
+- `ensureDirectory(path: string): Promise<void>`
+  - Ensures script root exists.
+
+### `PathUtils`
+
+```ts
+interface PathUtils {
+  normalize(path: string): string;
+  isAbsolute(path: string): boolean;
+  join(...paths: string[]): string;
+  dirname(path: string): string;
+  relative(from: string, to: string): string;
+}
+```
+
+### `Logger`
+
+```ts
+interface Logger {
+  debug(message: string, ...args: unknown[]): void;
+  info(message: string, ...args: unknown[]): void;
+  warn(message: string, ...args: unknown[]): void;
+  error(message: string, ...args: unknown[]): void;
+}
+```
+
+### `ScriptLoaderCallbacks`
+
+```ts
+interface ScriptLoaderCallbacks {
+  onScriptLoaded?: (metadata: ScriptMetadata, exports: unknown) => void;
+  onScriptUnloaded?: (metadata: ScriptMetadata) => void;
+  onScriptError?: (path: string, error: Error) => void;
+  isScriptPath?: (path: string) => boolean;
+}
+```
+
+- `onScriptLoaded`: called after compile + runtime load succeeds.
+- `onScriptUnloaded`: called when script is removed or replaced.
+- `onScriptError`: called on read/compile/runtime failure.
+- `isScriptPath`: optional secondary filter before loading.
+
+### `ModuleResolver` (optional)
+
+Resolves and loads script modules for `require()` in runtime:
+
+```ts
+interface ModuleResolver {
+  resolve(specifier: string, fromPath: string): Promise<string | null>;
+  load(resolvedPath: string): Promise<{ code: string; mtime?: number }>;
+  clearCache?(): void;
+}
+```
 
 ## Usage
 
@@ -49,34 +114,62 @@ import {
   ScriptRegistry,
   ScriptCompiler,
   FunctionRuntime,
-  type ExecutionContextConfig
+  type ExecutionContextConfig,
+  type ScriptHost,
+  type PathUtils,
+  type Logger,
 } from "@obsiscripta/script-loader-core";
 
-// Implement the required interfaces for your platform
 const scriptHost: ScriptHost = {
-  async readFile(path) { /* ... */ },
-  async listFiles(root) { /* ... */ },
-  watch(root, handlers) { /* ... */ }
+  async readFile(path) {
+    return {
+      contents: "module.exports = {};",
+      mtime: Date.now(),
+      loaderType: "js", // needed for non-.js/.ts paths
+    };
+  },
+  async listFiles(root) {
+    return [`${root}/tool.md`]; // host returns script files only
+  },
+  watch(root, handlers) {
+    return { dispose() {} };
+  },
+  async exists(path) {
+    return true;
+  },
+  async ensureDirectory(path) {}
 };
 
 const pathUtils: PathUtils = {
-  normalize(path) { /* ... */ },
-  isAbsolute(path) { /* ... */ },
-  join(...paths) { /* ... */ }
+  normalize(path) {
+    return path;
+  },
+  isAbsolute(path) {
+    return path.startsWith("/");
+  },
+  join(...paths) {
+    return paths.join("/");
+  },
+  dirname(path) {
+    return path.split("/").slice(0, -1).join("/");
+  },
+  relative(from, to) {
+    return to;
+  }
 };
 
 const logger: Logger = {
   debug: console.debug,
   info: console.info,
   warn: console.warn,
-  error: console.error
+  error: console.error,
 };
 
-// Create the core loader
 const registry = new ScriptRegistry();
 const compiler = new ScriptCompiler();
 const contextConfig: ExecutionContextConfig = {
-  /* ... */
+  variableNames: ["context"],
+  provideContext: () => ({ context: {} }),
 };
 const runtime = new FunctionRuntime(contextConfig, { pathUtils });
 
@@ -87,17 +180,12 @@ const loader = new ScriptLoaderCore(
   registry,
   compiler,
   runtime,
+  {},
   "scripts",
   {
-    isScriptPath: (path) => path.endsWith(".js"),
-    moduleResolver: {
-      async resolve(fromId, request) {
-        /* ... */
-      },
-      async load(resolution) {
-        /* ... */
-      }
-    }
+    onScriptLoaded: (metadata) => {
+      logger.info(`loaded: ${metadata.name}`);
+    },
   }
 );
 
