@@ -72,7 +72,12 @@ function parseMarkdownHeading(line: string, lineIndex: number): MarkdownHeading 
 		return null;
 	}
 
-	const [, hashPrefix, rawText] = match;
+	const hashPrefix = match[1];
+	const rawText = match[2];
+	if (!hashPrefix || !rawText) {
+		return null;
+	}
+
 	const text = rawText.trim().replace(/\s+#+\s*$/, "").trim();
 	if (text.length === 0) {
 		return null;
@@ -107,7 +112,7 @@ function extractSectionContent(
 		return { error: `Error: Section "${section}" with level ${level} not found.` };
 	}
 
-	const selected = matchingHeadings[0];
+	const selected = matchingHeadings[0]!;
 	const nextSameLevelHeading = headings.find((heading) => heading.lineIndex > selected.lineIndex && heading.level === selected.level);
 	const endLineIndex = nextSameLevelHeading ? nextSameLevelHeading.lineIndex - 1 : lines.length - 1;
 
