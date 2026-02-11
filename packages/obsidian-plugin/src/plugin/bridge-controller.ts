@@ -12,7 +12,6 @@ interface BridgeSettings {
 	autoStart: boolean;
 	port: number;
 	bindHost: string;
-	enableBridgeV1: boolean;
 	mcpApiKeys: string[];
 }
 
@@ -49,8 +48,6 @@ export class BridgeController {
 		return (
 			this.runningSettings.port !== this.settings.port ||
 			this.runningSettings.bindHost !== this.settings.bindHost ||
-			this.runningSettings.enableBridgeV1 !==
-				this.settings.enableBridgeV1 ||
 			this.runningSettings.mcpApiKeys.join("\n") !==
 				this.settings.mcpApiKeys.join("\n")
 		);
@@ -75,14 +72,13 @@ export class BridgeController {
 		const toolContext: AppContext = {
 			vault: this.vault,
 			app: this.app,
-			session: createSessionContext("bridge-v1-default"),
+			session: createSessionContext("mcp-default"),
 		};
 		const executor = new ToolExecutor(this.toolRegistry, toolContext);
 		this.server = new BridgeServer(
 			executor,
 			this.settings.port,
 			this.settings.bindHost,
-			this.settings.enableBridgeV1,
 			this.settings.mcpApiKeys,
 		);
 		try {
@@ -134,7 +130,6 @@ export class BridgeController {
 				oldSettings.port !== newSettings.port ||
 				oldSettings.bindHost !== newSettings.bindHost ||
 				oldSettings.autoStart !== newSettings.autoStart ||
-				oldSettings.enableBridgeV1 !== newSettings.enableBridgeV1 ||
 				apiKeysChanged;
 
 			if (bridgeSettingsChanged) {
@@ -142,7 +137,6 @@ export class BridgeController {
 					port: newSettings.port,
 					bindHost: newSettings.bindHost,
 					autoStart: newSettings.autoStart,
-					enableBridgeV1: newSettings.enableBridgeV1,
 					mcpApiKeys: [...newSettings.mcpApiKeys],
 				});
 			}

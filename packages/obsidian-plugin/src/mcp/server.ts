@@ -4,7 +4,6 @@ import { serve, ServerType } from "@hono/node-server";
 import type { Socket } from "net";
 import { randomUUID } from "crypto";
 import { ToolExecutor } from "./tools/executor";
-import { ToolCallRequest } from "./bridge-types";
 import {
 	handleMCPRequest,
 	parseJSONRPCMessage,
@@ -19,7 +18,6 @@ export class BridgeServer {
 	private sockets = new Set<Socket>();
 	private readonly executor: ToolExecutor;
 	private readonly mcpApiKeys: ReadonlySet<string>;
-	private readonly enableBridgeV1: boolean;
 	private readonly mcpSessions = new Map<string, { createdAt: number; lastAccessedAt: number }>();
 	private port: number;
 	private host: string;
@@ -29,13 +27,11 @@ export class BridgeServer {
 		executor: ToolExecutor,
 		port: number = 3000,
 		host: string = "127.0.0.1",
-		enableBridgeV1: boolean = true,
 		mcpApiKeys: readonly string[] = [],
 	) {
 		this.executor = executor;
 		this.port = port;
 		this.host = host;
-		this.enableBridgeV1 = enableBridgeV1;
 		this.mcpApiKeys = new Set(mcpApiKeys);
 		this.app = this.createApp();
 	}
@@ -95,115 +91,6 @@ export class BridgeServer {
 	 */
 	private createApp(): Hono {
 		const app = new Hono();
-
-		if (this.enableBridgeV1) {
-			// CORS middleware for v1 API
-			app.use(
-				"/bridge/v1/*",
-				cors({
-					origin: "*",
-					allowMethods: ["GET", "POST", "OPTIONS"],
-					allowHeaders: ["Content-Type"],
-				}),
-			);
-
-			// Body size limit middleware for v1 API
-			app.use("/bridge/v1/*", async (c, next) => {
-				const contentLength = c.req.header("content-length");
-				if (
-					contentLength &&
-					parseInt(contentLength) > BridgeServer.MAX_BODY_BYTES
-				) {
-					return c.json(
-						{
-							error: "Request body too large",
-							message: "Request body too large",
-						},
-						413,
-					);
-				}
-				return await next();
-			});
-
-			// Health endpoint
-			app.get("/bridge/v1/health", (c) => {
-				return c.json(this.executor.getHealth());
-			});
-
-			// Tools list endpoint
-			app.get("/bridge/v1/tools", (c) => {
-				return c.json(this.executor.getTools());
-			});
-
-			// Tool call endpoint
-			app.post("/bridge/v1/tools/:toolName/call", async (c) => {
-				const toolName = c.req.param("toolName");
-
-				if (!this.executor.isToolAvailable(toolName)) {
-					return c.json(
-						{
-							error: "Tool not found",
-							message: "Tool not found",
-						},
-						404,
-					);
-				}
-
-				let payload: ToolCallRequest;
-				try {
-					payload = await c.req.json<ToolCallRequest>();
-				} catch (error) {
-					const message =
-						error instanceof Error ? error.message : String(error);
-					return c.json(
-						{
-							error: "Invalid request body",
-							message: "Invalid request body",
-							details: message,
-						},
-						400,
-					);
-				}
-
-				const hasArguments =
-					payload &&
-					typeof payload === "object" &&
-					"arguments" in payload;
-				const argsValue = hasArguments ? payload.arguments : null;
-				if (
-					!hasArguments ||
-					!argsValue ||
-					typeof argsValue !== "object" ||
-					Array.isArray(argsValue)
-				) {
-					return c.json(
-						{
-							error: "Invalid request body",
-							message: "Invalid request body",
-						},
-						400,
-					);
-				}
-
-				try {
-					const response = await this.executor.executeToolCall(
-						toolName,
-						argsValue,
-					);
-					return c.json(response);
-				} catch (error) {
-					return c.json(
-						{
-							error: "Internal server error",
-							message: "Internal server error",
-							details:
-								error instanceof Error ? error.message : String(error),
-						},
-						500,
-					);
-				}
-			});
-		}
 
 		// CORS middleware for MCP standard HTTP
 		app.use(
@@ -470,11 +357,6 @@ export class BridgeServer {
 						console.debug(
 							`[Bridge] Server started on http://${info.address}:${info.port}`,
 						);
-						if (this.enableBridgeV1) {
-							console.debug(
-								`[Bridge] - v1 API: http://${info.address}:${info.port}/bridge/v1`,
-							);
-						}
 						console.debug(
 							`[Bridge] - MCP Standard: http://${info.address}:${info.port}/mcp`,
 						);
