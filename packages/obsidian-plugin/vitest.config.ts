@@ -19,6 +19,8 @@ export default defineConfig({
 	},
 	resolve: {
 		alias: {
+			"@obsiscripta/obsidian-script-loader": resolve(__dirname, "../obsidian-script-loader/src/index.ts"),
+			"@obsiscripta/script-loader-core": resolve(__dirname, "../script-loader-core/src/index.ts"),
 			obsidian: resolve(__dirname, "src/__tests__/mocks/obsidian.ts"),
 		},
 	},

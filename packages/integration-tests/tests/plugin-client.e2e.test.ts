@@ -29,21 +29,35 @@ afterEach(async () => {
 
 describe('PluginClient Fake HTTP fallback E2E', () => {
   it('sends MCP API key header on MCP requests', async () => {
-    let receivedApiKey: string | undefined;
+    const receivedApiKeys: Array<string | undefined> = [];
 
     const fake = await startFakeServer((req, res) => {
       if (req.method === 'POST' && req.url === '/mcp') {
-        receivedApiKey = req.headers['x-obsiscripta-api-key'] as string | undefined;
-        res.setHeader('content-type', 'application/json');
-        res.end(
-          JSON.stringify({
-            jsonrpc: '2.0',
-            id: 1,
-            result: {
-              tools: [],
-            },
-          }),
-        );
+        receivedApiKeys.push(req.headers['x-obsiscripta-api-key'] as string | undefined);
+        let body = '';
+        req.on('data', (chunk) => {
+          body += chunk;
+        });
+        req.on('end', () => {
+          const parsed = JSON.parse(body) as { method?: string; id?: number };
+          res.setHeader('content-type', 'application/json');
+
+          if (parsed.method === 'initialize') {
+            res.setHeader('mcp-session-id', 'session-1');
+            res.end(JSON.stringify({ jsonrpc: '2.0', id: parsed.id ?? 1, result: {} }));
+            return;
+          }
+
+          res.end(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              id: parsed.id ?? 1,
+              result: {
+                tools: [],
+              },
+            }),
+          );
+        });
         return;
       }
 
@@ -60,7 +74,7 @@ describe('PluginClient Fake HTTP fallback E2E', () => {
     });
     await client.listTools();
 
-    expect(receivedApiKey).toBe('obsi_test_key');
+    expect(receivedApiKeys).toEqual(['obsi_test_key', 'obsi_test_key']);
   });
 
   it('falls back from MCP to v1 listTools in auto transport mode', async () => {
