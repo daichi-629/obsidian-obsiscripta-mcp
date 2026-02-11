@@ -16,6 +16,7 @@ import type {
 	MCPTool,
 } from "./mcp-types";
 import { JSONRPCErrorCode } from "./mcp-types";
+import { createSessionApi } from "./session-data-store";
 
 /**
  * Handle tools/list JSON-RPC request
@@ -52,7 +53,8 @@ export function handleMCPToolsList(
 export async function handleMCPToolsCall(
 	request: ToolsCallRequest,
 	registry: ToolRegistry,
-	context: AppContext
+	context: AppContext,
+	sessionId?: string
 ): Promise<ToolsCallResponse> {
 	const { name, arguments: args } = request.params;
 
@@ -83,11 +85,15 @@ export async function handleMCPToolsCall(
 		) as ToolsCallResponse;
 	}
 
+	const executionContext: AppContext = sessionId
+		? { ...context, session: createSessionApi(sessionId) }
+		: context;
+
 	// Execute tool
 	try {
 		const result = await tool.handler(
 			(args || {}) as Record<string, unknown>,
-			context
+			executionContext
 		);
 
 		// Tool execution error (reported in result with isError flag)
@@ -160,7 +166,8 @@ function createErrorResponse(
 export async function handleMCPRequest(
 	request: JSONRPCRequest,
 	registry: ToolRegistry,
-	context: AppContext
+	context: AppContext,
+	sessionId?: string
 ): Promise<JSONRPCResponse> {
 	switch (request.method) {
 		case "initialize":
@@ -188,7 +195,8 @@ export async function handleMCPRequest(
 			return handleMCPToolsCall(
 				request as ToolsCallRequest,
 				registry,
-				context
+				context,
+				sessionId
 			);
 
 		default:

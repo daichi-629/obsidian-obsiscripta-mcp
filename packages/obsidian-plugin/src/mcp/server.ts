@@ -11,6 +11,7 @@ import {
 	createInvalidRequestResponse,
 } from "./mcp-api";
 import { MCPSessionStore } from "./session-store";
+import { clearSessionData } from "./session-data-store";
 
 export class BridgeServer {
 	private static readonly MAX_BODY_BYTES = 1024 * 1024;
@@ -296,6 +297,7 @@ export class BridgeServer {
 
 				const session = this.mcpSessions.touch(existingSessionId);
 				if (!session) {
+					clearSessionData(existingSessionId);
 					return c.json(
 						{
 							jsonrpc: "2.0",
@@ -320,7 +322,8 @@ export class BridgeServer {
 				const response = await handleMCPRequest(
 					request,
 					this.executor.getRegistry(),
-					this.executor.getContext()
+					this.executor.getContext(),
+					existingSessionId
 				);
 
 				// For Phase 1, we return application/json (no SSE streaming)
@@ -368,6 +371,7 @@ export class BridgeServer {
 				);
 			}
 
+			clearSessionData(sessionId);
 			return c.body(null, 204);
 		});
 

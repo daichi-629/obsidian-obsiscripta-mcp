@@ -14,6 +14,14 @@ export interface AppContext {
 	vault: Vault;
 	/** Obsidian App instance for global app state */
 	app: App;
+	/**
+	 * Session-scoped key/value storage for MCP requests.
+	 * The backing store is isolated by MCP session id.
+	 */
+	session?: {
+		get: (key: string) => unknown;
+		set: (key: string, value: unknown) => void;
+	};
 }
 
 /**
