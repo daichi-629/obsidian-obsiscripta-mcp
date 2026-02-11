@@ -80,6 +80,19 @@ describe("SettingsStore", () => {
 			const settings = store.getSettings();
 			expect(settings.mcpApiKeys).toEqual(["key1", "key2"]);
 		});
+
+		it("should normalize toolsExcludedFromSearch array on load", async () => {
+			const settingsWithDuplicates: Partial<MCPPluginSettings> = {
+				toolsExcludedFromSearch: ["tool1", "tool2", "tool1"],
+			};
+			mockPersistence.load = vi.fn().mockResolvedValue(settingsWithDuplicates);
+
+			const store = new SettingsStore(mockPersistence);
+			await store.load();
+
+			const settings = store.getSettings();
+			expect(settings.toolsExcludedFromSearch).toEqual(["tool1", "tool2"]);
+		});
 	});
 
 	describe("updateSetting", () => {
@@ -239,6 +252,25 @@ describe("SettingsStore", () => {
 			await settingsStore.setToolEnabled("myTool", false);
 
 			expect(changeHandler).toHaveBeenCalledOnce();
+		});
+	});
+
+	describe("tool search inclusion", () => {
+		beforeEach(async () => {
+			await settingsStore.load();
+		});
+
+		it("should exclude a tool from search", async () => {
+			await settingsStore.setToolIncludedInSearch("myTool", false);
+			const settings = settingsStore.getSettings();
+			expect(settings.toolsExcludedFromSearch).toContain("myTool");
+		});
+
+		it("should include a tool in search", async () => {
+			await settingsStore.updateSetting("toolsExcludedFromSearch", ["myTool"]);
+			await settingsStore.setToolIncludedInSearch("myTool", true);
+			const settings = settingsStore.getSettings();
+			expect(settings.toolsExcludedFromSearch).not.toContain("myTool");
 		});
 	});
 

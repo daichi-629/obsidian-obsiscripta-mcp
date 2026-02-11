@@ -162,6 +162,31 @@ describe("ToolingManager - Settings Integration", () => {
 		});
 	});
 
+	describe("toolsExcludedFromSearch change detection", () => {
+		it("should exclude tool from search when added to toolsExcludedFromSearch", async () => {
+			const setIncludedSpy = vi.spyOn(toolingManager, "setToolIncludedInSearch");
+
+			toolingManager.subscribeToSettings(settingsStore);
+
+			await settingsStore.setToolIncludedInSearch("myTool", false);
+			await new Promise((resolve) => setTimeout(resolve, 10));
+
+			expect(setIncludedSpy).toHaveBeenCalledWith("myTool", false);
+		});
+
+		it("should include tool in search when removed from toolsExcludedFromSearch", async () => {
+			await settingsStore.updateSetting("toolsExcludedFromSearch", ["myTool"]);
+			const setIncludedSpy = vi.spyOn(toolingManager, "setToolIncludedInSearch");
+
+			toolingManager.subscribeToSettings(settingsStore);
+
+			await settingsStore.setToolIncludedInSearch("myTool", true);
+			await new Promise((resolve) => setTimeout(resolve, 10));
+
+			expect(setIncludedSpy).toHaveBeenCalledWith("myTool", true);
+		});
+	});
+
 	describe("settings subscription", () => {
 		it("should handle both scriptsPath and disabledTools changes together", async () => {
 			const setEnabledSpy = vi.spyOn(toolingManager, "setToolEnabled");

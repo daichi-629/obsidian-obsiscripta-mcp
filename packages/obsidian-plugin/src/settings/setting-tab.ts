@@ -322,6 +322,16 @@ export class MCPSettingTab extends PluginSettingTab {
 						// ToolingManager is automatically updated via settingsStore.on("change")
 					});
 				});
+
+			new Setting(containerEl)
+				.setName(`${toolName} (search index)`)
+				.setDesc("Include this tool in results from the built-in search_tools tool")
+				.addToggle((toggle) => {
+					toggle.setValue(this.toolingManager.isToolIncludedInSearch(toolName));
+					toggle.onChange(async (value) => {
+						await this.settingsStore.setToolIncludedInSearch(toolName, value);
+					});
+				});
 		};
 
 		new Setting(containerEl).setName("Built-in tools").setHeading();

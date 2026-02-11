@@ -5,6 +5,7 @@ export interface MCPPluginSettings {
 	enableBridgeV1: boolean;
 	scriptsPath: string;
 	disabledTools: string[];
+	toolsExcludedFromSearch: string[];
 	mcpApiKeys: string[];
 }
 
@@ -15,5 +16,6 @@ export const DEFAULT_SETTINGS: MCPPluginSettings = {
 	enableBridgeV1: true,
 	scriptsPath: "mcp-tools",
 	disabledTools: [],
+	toolsExcludedFromSearch: [],
 	mcpApiKeys: [],
 };

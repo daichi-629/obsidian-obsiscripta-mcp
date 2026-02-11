@@ -5,6 +5,7 @@ import { MCPToolDefinition } from "../mcp/tools/types";
 import { ToolRegistry, ToolSource } from "../mcp/tools/registry";
 import { getBuiltinNoteTools } from "../mcp/tools/builtin/notes";
 import { getBuiltinEditTools } from "../mcp/tools/builtin/edit";
+import { createBuiltinToolExecuteTool, createBuiltinToolSearchTool } from "../mcp/tools/builtin/tool-discovery";
 import {
 	ScriptLoader,
 	ScriptRegistry,
@@ -22,6 +23,7 @@ export class ToolingManager {
 	private app: App;
 	private settings: MCPPluginSettings;
 	private eventRegistrar: EventRegistrar;
+	private toolsExcludedFromSearch: Set<string>;
 	private scriptContext: ScriptExecutionContext;
 	private exampleSourcePath: string;
 	readonly registry: ToolRegistry;
@@ -43,6 +45,7 @@ export class ToolingManager {
 		this.app = app;
 		this.settings = settings;
 		this.eventRegistrar = eventRegistrar;
+		this.toolsExcludedFromSearch = new Set(settings.toolsExcludedFromSearch);
 		this.scriptContext = { vault, app, plugin };
 		this.exampleSourcePath = exampleSourcePath;
 		this.registry = new ToolRegistry(disabledTools);
@@ -55,6 +58,18 @@ export class ToolingManager {
 		for (const tool of getBuiltinEditTools()) {
 			this.registry.register(tool, ToolSource.Builtin);
 		}
+
+		this.registry.register(
+			createBuiltinToolSearchTool(
+				this.registry,
+				(toolName) => this.isToolIncludedInSearch(toolName),
+			),
+			ToolSource.Builtin,
+		);
+		this.registry.register(
+			createBuiltinToolExecuteTool(this.registry),
+			ToolSource.Builtin,
+		);
 
 		const scriptsPath = this.settings.scriptsPath ?? "";
 
@@ -136,6 +151,18 @@ export class ToolingManager {
 		this.registry.setEnabled(name, enabled);
 	}
 
+	isToolIncludedInSearch(name: string): boolean {
+		return this.registry.has(name) && !this.toolsExcludedFromSearch.has(name);
+	}
+
+	setToolIncludedInSearch(name: string, included: boolean): void {
+		if (included) {
+			this.toolsExcludedFromSearch.delete(name);
+			return;
+		}
+		this.toolsExcludedFromSearch.add(name);
+	}
+
 	async updateScriptsPath(scriptsPath: string): Promise<string> {
 		const normalizedPath = ScriptLoader.normalizeScriptsPath(scriptsPath);
 		if (!this.scriptLoader) {
@@ -190,6 +217,21 @@ export class ToolingManager {
 				for (const tool of oldDisabled) {
 					if (!newDisabled.has(tool)) {
 						this.setToolEnabled(tool, true);
+					}
+				}
+
+				const oldSearchExcluded = new Set(oldSettings.toolsExcludedFromSearch);
+				const newSearchExcluded = new Set(newSettings.toolsExcludedFromSearch);
+
+				for (const tool of newSearchExcluded) {
+					if (!oldSearchExcluded.has(tool)) {
+						this.setToolIncludedInSearch(tool, false);
+					}
+				}
+
+				for (const tool of oldSearchExcluded) {
+					if (!newSearchExcluded.has(tool)) {
+						this.setToolIncludedInSearch(tool, true);
 					}
 				}
 			})();
