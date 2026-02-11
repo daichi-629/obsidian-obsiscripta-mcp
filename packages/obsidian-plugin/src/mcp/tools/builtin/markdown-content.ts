@@ -3,6 +3,12 @@ interface MarkdownSections {
 	body: string;
 }
 
+function stripFrontmatterDelimiters(frontmatter: string): string {
+	return frontmatter
+		.replace(/^---\r?\n/, "")
+		.replace(/\r?\n---(?:\r?\n|$)$/, "");
+}
+
 /**
  * Splits markdown into frontmatter (if present) and body content.
  * Only treats YAML frontmatter at the very top of the file as frontmatter.
@@ -33,4 +39,17 @@ export function mergeFrontmatter(frontmatter: string, body: string): string {
 	}
 
 	return `${frontmatter}${body}`;
+}
+
+export function parseFrontmatterContent(frontmatter: string): string {
+	return stripFrontmatterDelimiters(frontmatter);
+}
+
+export function buildFrontmatter(content: string): string {
+	if (!content.trim()) {
+		return "";
+	}
+
+	const normalized = content.endsWith("\n") ? content : `${content}\n`;
+	return `---\n${normalized}---\n`;
 }

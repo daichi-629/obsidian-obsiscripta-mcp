@@ -5,6 +5,7 @@ import { MCPToolDefinition } from "../mcp/tools/types";
 import { ToolRegistry, ToolSource } from "../mcp/tools/registry";
 import { getBuiltinNoteTools } from "../mcp/tools/builtin/notes";
 import { getBuiltinEditTools } from "../mcp/tools/builtin/edit";
+import { getBuiltinFrontmatterTools } from "../mcp/tools/builtin/frontmatter";
 import {
 	ScriptLoader,
 	ScriptRegistry,
@@ -53,6 +54,9 @@ export class ToolingManager {
 			this.registry.register(tool, ToolSource.Builtin);
 		}
 		for (const tool of getBuiltinEditTools()) {
+			this.registry.register(tool, ToolSource.Builtin);
+		}
+		for (const tool of getBuiltinFrontmatterTools()) {
 			this.registry.register(tool, ToolSource.Builtin);
 		}
 
