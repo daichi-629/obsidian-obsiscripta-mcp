@@ -8,12 +8,28 @@ function createTFile(path: string, basename: string): TFile {
 	return file;
 }
 
+function createSessionContext() {
+	const store = new Map<string, unknown>();
+	return {
+		get: (key: string): unknown => store.get(key),
+		set: (key: string, value: unknown): void => {
+			store.set(key, value);
+		},
+		delete: (key: string): boolean => store.delete(key),
+		has: (key: string): boolean => store.has(key),
+		clear: (): void => {
+			store.clear();
+		},
+	};
+}
+
 describe("read_note tool", () => {
 	it("resolves wiki links when resolveLinks=true", async () => {
 		const sourceFile = createTFile("Notes/Daily.md", "Daily");
 		const targetFile = createTFile("Projects/Plan.md", "Plan");
 
 		const context = {
+			session: createSessionContext(),
 			vault: {
 				getAbstractFileByPath: vi.fn().mockReturnValue(sourceFile),
 				read: vi.fn().mockResolvedValue("Go to [[Plan]] and [[Plan#Roadmap|roadmap section]]"),
@@ -40,6 +56,7 @@ describe("read_note tool", () => {
 	it("keeps original markdown when resolveLinks is omitted", async () => {
 		const sourceFile = createTFile("Notes/Daily.md", "Daily");
 		const context = {
+			session: createSessionContext(),
 			vault: {
 				getAbstractFileByPath: vi.fn().mockReturnValue(sourceFile),
 				read: vi.fn().mockResolvedValue("Go to [[Plan]]"),
