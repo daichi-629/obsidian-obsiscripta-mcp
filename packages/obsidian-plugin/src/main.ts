@@ -38,6 +38,7 @@ export default class MCPPlugin extends Plugin {
 			this,
 			exampleSourcePath,
 			this.settings.disabledTools,
+			this.settings.searchExcludedTools,
 		);
 		await this.toolingManager.start();
 

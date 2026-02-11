@@ -86,7 +86,8 @@ describe("Settings Integration", () => {
 			settings,
 			mockPlugin as any,
 			"",
-			settings.disabledTools
+			settings.disabledTools,
+			settings.searchExcludedTools
 		);
 
 		// @ts-ignore
