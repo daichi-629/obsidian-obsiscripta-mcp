@@ -161,8 +161,8 @@ export class ScriptLoaderCore {
 			relativePath = normalizedScriptPath.slice(normalizedScriptsPath.length + 1);
 		}
 
-		// Remove file extension (.js, .ts)
-		relativePath = relativePath.replace(/\.(js|ts)$/, "");
+		// Remove file extension (.js, .ts, .md)
+		relativePath = relativePath.replace(/\.(js|ts|md)$/, "");
 
 		return relativePath;
 	}
@@ -268,7 +268,14 @@ export class ScriptLoaderCore {
 
 		try {
 			const fileInfo = await this.scriptHost.readFile(scriptPath);
-			const compiled = await this.compiler.compile(scriptPath, fileInfo.contents, loader, fileInfo.mtime);
+			const source = loader === "md" ? this.extractJavaScriptFromMarkdown(fileInfo.contents) : fileInfo.contents;
+			if (!source) {
+				await this.unregisterScript(scriptPath);
+				return;
+			}
+
+			const compileLoader: ScriptLoaderType = loader === "md" ? "js" : loader;
+			const compiled = await this.compiler.compile(scriptPath, source, compileLoader, fileInfo.mtime);
 
 			// Load script using runtime
 			const handle = await this.runtime.load(compiled, scriptPath, this.scriptContext);
@@ -322,13 +329,16 @@ export class ScriptLoaderCore {
 	/**
 	 * Get the loader type for a file path
 	 */
-	private getLoaderForPath(filePath: string): ScriptLoaderType | null {
+	private getLoaderForPath(filePath: string): ScriptLoaderType | "md" | null {
 		const lowerPath = filePath.toLowerCase();
 		if (lowerPath.endsWith(".js")) {
 			return "js";
 		}
 		if (lowerPath.endsWith(".ts") && !lowerPath.endsWith(".d.ts")) {
 			return "ts";
+		}
+		if (lowerPath.endsWith(".md")) {
+			return "md";
 		}
 		return null;
 	}
@@ -341,6 +351,21 @@ export class ScriptLoaderCore {
 			return false;
 		}
 		const lowerPath = filePath.toLowerCase();
-		return lowerPath.endsWith(".js") || (lowerPath.endsWith(".ts") && !lowerPath.endsWith(".d.ts"));
+		return lowerPath.endsWith(".js")
+			|| (lowerPath.endsWith(".ts") && !lowerPath.endsWith(".d.ts"))
+			|| lowerPath.endsWith(".md");
+	}
+
+	/**
+	 * Extract the first JavaScript code block from a markdown file.
+	 */
+	private extractJavaScriptFromMarkdown(markdown: string): string | null {
+		const match = markdown.match(/```(?:js|javascript)\b[^\n]*\n([\s\S]*?)```/i);
+		if (!match) {
+			return null;
+		}
+
+		const source = match[1].trim();
+		return source.length > 0 ? source : null;
 	}
 }

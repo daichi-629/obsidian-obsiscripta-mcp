@@ -151,7 +151,9 @@ export class ObsidianVaultAdapter implements ScriptHost {
 
 	private isScriptFile(filePath: string): boolean {
 		const lowerPath = filePath.toLowerCase();
-		return lowerPath.endsWith(".js") || (lowerPath.endsWith(".ts") && !lowerPath.endsWith(".d.ts"));
+		return lowerPath.endsWith(".js")
+			|| (lowerPath.endsWith(".ts") && !lowerPath.endsWith(".d.ts"))
+			|| lowerPath.endsWith(".md");
 	}
 
 	private isInFolder(filePath: string, folderPath: string): boolean {

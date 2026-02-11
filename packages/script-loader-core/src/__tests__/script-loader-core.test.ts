@@ -110,8 +110,8 @@ describe("ScriptLoaderCore - Desired Behavior", () => {
 		});
 
 		it("should skip non-script files", async () => {
-			// DESIRED: Only .js and .ts files are loaded
-			scriptHost.setFile("mcp-tools/readme.md", "# Documentation", 1000);
+			// DESIRED: Unsupported files are ignored
+			scriptHost.setFile("mcp-tools/readme.txt", "Documentation", 1000);
 			scriptHost.setFile("mcp-tools/types.d.ts", "export type T = {};", 2000);
 			scriptHost.setFile("mcp-tools/tool.ts", "export default {};", 3000);
 
@@ -120,6 +120,42 @@ describe("ScriptLoaderCore - Desired Behavior", () => {
 
 			expect(registry.count()).toBe(1);
 			expect(registry.get("mcp-tools/tool.ts")).toBeDefined();
+		});
+
+		it("should load markdown files with javascript code blocks", async () => {
+			scriptHost.setFile(
+				"mcp-tools/from-note.md",
+				[
+					"# Tool",
+					"",
+					"```js",
+					"module.exports = {",
+					"  description: \"from note\"",
+					"};",
+					"```",
+				].join("\n"),
+				1000
+			);
+
+			loader = createLoader();
+			await loader.start();
+
+			expect(registry.count()).toBe(1);
+			expect(registry.get("mcp-tools/from-note.md")).toBeDefined();
+			expect(callbacks.onScriptLoaded).toHaveBeenCalledWith(
+				expect.objectContaining({ name: "from-note", path: "mcp-tools/from-note.md" }),
+				expect.any(Object)
+			);
+		});
+
+		it("should ignore markdown files without javascript code blocks", async () => {
+			scriptHost.setFile("mcp-tools/note.md", "# Just a note", 1000);
+
+			loader = createLoader();
+			await loader.start();
+
+			expect(registry.count()).toBe(0);
+			expect(callbacks.onScriptLoaded).not.toHaveBeenCalled();
 		});
 
 		it("should honor isScriptPath when provided", async () => {
