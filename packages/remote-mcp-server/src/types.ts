@@ -1,19 +1,6 @@
 /**
- * Type definitions for remote-mcp-server
- * Re-exports shared bridge types and defines server-specific types
+ * Type definitions for remote-mcp-server.
  */
-
-export type {
-	MCPContent,
-	HealthResponse,
-	Tool,
-	ToolListResponse,
-	ToolCallRequest,
-	ToolCallSuccessResponse,
-	ToolCallErrorResponse,
-	ToolCallResponse,
-	ErrorResponse,
-} from "@obsiscripta/shared";
 
 // =============================================================================
 // OAuth Types
@@ -101,7 +88,3 @@ export interface PluginToken {
 	createdAt: number;
 	lastUsedAt?: number;
 }
-
-// =============================================================================
-// MCP Types
-// =============================================================================
