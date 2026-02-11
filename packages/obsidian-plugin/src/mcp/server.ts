@@ -12,6 +12,19 @@ import {
 	createInvalidRequestResponse,
 } from "./mcp-api";
 import { deleteSessionStore } from "./tools/session-store";
+import { isJSONRPCNotification, isJSONRPCRequest, isJSONRPCResponse, JSONRPCResponse } from "./mcp-types";
+
+interface SSEEvent {
+	id: string;
+	data: string;
+	retryMs?: number;
+}
+
+interface SSEStreamState {
+	streamId: string;
+	events: SSEEvent[];
+	createdAt: number;
+}
 
 export class BridgeServer {
 	private static readonly MAX_BODY_BYTES = 1024 * 1024;
@@ -21,6 +34,8 @@ export class BridgeServer {
 	private readonly mcpApiKeys: ReadonlySet<string>;
 	private readonly enableBridgeV1: boolean;
 	private readonly mcpSessions = new Map<string, { createdAt: number; lastAccessedAt: number }>();
+	private readonly sseStreams = new Map<string, SSEStreamState>();
+	private readonly sseTtlMs = 5 * 60 * 1000;
 	private port: number;
 	private host: string;
 	private app: Hono;
@@ -72,6 +87,109 @@ export class BridgeServer {
 
 	private createSessionId(): string {
 		return randomUUID();
+	}
+
+	private createSSEStreamId(): string {
+		return randomUUID();
+	}
+
+	private parseAcceptHeader(accept: string | undefined): { supportsJson: boolean; supportsSSE: boolean } {
+		const value = (accept ?? "").toLowerCase();
+		return {
+			supportsJson: value.includes("application/json") || value.includes("*/*"),
+			supportsSSE: value.includes("text/event-stream") || value.includes("*/*"),
+		};
+	}
+
+	private createSSEEvent(streamId: string, sequence: number, data: string, retryMs?: number): SSEEvent {
+		return {
+			id: `${streamId}:${sequence}`,
+			data,
+			retryMs,
+		};
+	}
+
+	private encodeSSEEvent(event: SSEEvent): string {
+		const lines = [`id: ${event.id}`];
+		if (event.retryMs !== undefined) {
+			lines.push(`retry: ${event.retryMs}`);
+		}
+		for (const line of event.data.split("\n")) {
+			lines.push(`data: ${line}`);
+		}
+		return `${lines.join("\n")}\n\n`;
+	}
+
+	private storeSSEStream(stream: SSEStreamState): void {
+		this.sseStreams.set(stream.streamId, stream);
+		this.pruneSSEStreams();
+	}
+
+	private pruneSSEStreams(): void {
+		const now = Date.now();
+		for (const [streamId, state] of this.sseStreams.entries()) {
+			if (now - state.createdAt > this.sseTtlMs) {
+				this.sseStreams.delete(streamId);
+			}
+		}
+	}
+
+	private findReplayEvents(lastEventIdHeader: string | undefined): SSEEvent[] | null {
+		if (!lastEventIdHeader) {
+			return null;
+		}
+
+		const lastEventId = lastEventIdHeader.trim();
+		const separatorIndex = lastEventId.lastIndexOf(":");
+		if (separatorIndex <= 0 || separatorIndex === lastEventId.length - 1) {
+			return null;
+		}
+
+		const streamId = lastEventId.slice(0, separatorIndex);
+		const sequenceText = lastEventId.slice(separatorIndex + 1);
+		const sequence = Number.parseInt(sequenceText, 10);
+		if (!Number.isFinite(sequence)) {
+			return null;
+		}
+
+		const stream = this.sseStreams.get(streamId);
+		if (!stream) {
+			return null;
+		}
+
+		return stream.events.filter((event) => {
+			const eventSeparator = event.id.lastIndexOf(":");
+			const eventSequence = Number.parseInt(event.id.slice(eventSeparator + 1), 10);
+			return Number.isFinite(eventSequence) && eventSequence > sequence;
+		});
+	}
+
+	private createSSEResponse(events: SSEEvent[]): Response {
+		const payload = events.map((event) => this.encodeSSEEvent(event)).join("");
+		return new Response(payload, {
+			status: 200,
+			headers: {
+				"Content-Type": "text/event-stream",
+				"Cache-Control": "no-cache",
+				Connection: "keep-alive",
+			},
+		});
+	}
+
+	private createSSEStreamForResponse(response: JSONRPCResponse): Response {
+		const streamId = this.createSSEStreamId();
+		const events: SSEEvent[] = [
+			this.createSSEEvent(streamId, 1, ""),
+			this.createSSEEvent(streamId, 2, JSON.stringify(response), 1000),
+		];
+
+		this.storeSSEStream({
+			streamId,
+			events,
+			createdAt: Date.now(),
+		});
+
+		return this.createSSEResponse(events);
 	}
 
 	private getSessionFromHeader(sessionIdHeader: string | undefined): string | null {
@@ -295,8 +413,42 @@ export class BridgeServer {
 			return c.body(null, 204);
 		});
 
+		app.get("/mcp", (c) => {
+			const { supportsSSE } = this.parseAcceptHeader(c.req.header("accept"));
+			if (!supportsSSE) {
+				return c.json(
+					{
+						error: "Not Acceptable",
+						message: "Accept header must include text/event-stream",
+					},
+					406,
+				);
+			}
+
+			const replayEvents = this.findReplayEvents(c.req.header("last-event-id"));
+			if (replayEvents && replayEvents.length > 0) {
+				return this.createSSEResponse(replayEvents);
+			}
+
+			const streamId = this.createSSEStreamId();
+			const events = [this.createSSEEvent(streamId, 1, "", 1000)];
+			this.storeSSEStream({ streamId, events, createdAt: Date.now() });
+			return this.createSSEResponse(events);
+		});
+
 		// MCP Standard HTTP endpoint (JSON-RPC over HTTP)
 		app.post("/mcp", async (c) => {
+			const { supportsJson, supportsSSE } = this.parseAcceptHeader(c.req.header("accept"));
+			if (!supportsJson && !supportsSSE) {
+				return c.json(
+					{
+						error: "Not Acceptable",
+						message: "Accept header must include application/json or text/event-stream",
+					},
+					406,
+				);
+			}
+
 			// Parse request body
 			let body: unknown;
 			try {
@@ -360,6 +512,15 @@ export class BridgeServer {
 				return c.json(errorResponse, 400);
 			}
 
+			if (isJSONRPCNotification(parsed) || isJSONRPCResponse(parsed)) {
+				return c.body(null, 202);
+			}
+
+			if (!isJSONRPCRequest(parsed)) {
+				const errorResponse = createInvalidRequestResponse("Unsupported JSON-RPC message type");
+				return c.json(errorResponse, 400);
+			}
+
 			const request = parsed;
 
 			// Handle the request
@@ -387,15 +548,17 @@ export class BridgeServer {
 					}
 				}
 
-				// For Phase 1, we return application/json (no SSE streaming)
-				// Phase 2+ will add SSE support when needed
+				if (supportsSSE) {
+					return this.createSSEStreamForResponse(response);
+				}
+
 				return c.json(response, 200);
 			} catch (error) {
 				console.error("[Bridge] Error handling MCP request:", error);
 				return c.json(
 					{
 						jsonrpc: "2.0",
-						id: request.id,
+						id: null,
 						error: {
 							code: -32603,
 							message: "Internal error",

@@ -8,6 +8,7 @@ import type { AppContext } from "../plugin/context";
 import type {
 	JSONRPCRequest,
 	JSONRPCResponse,
+	JSONRPCNotification,
 	JSONRPCError,
 	ToolsListRequest,
 	ToolsListResponse,
@@ -210,7 +211,7 @@ export async function handleMCPRequest(
 /**
  * Parse and validate JSON-RPC message from request body
  */
-export function parseJSONRPCMessage(body: unknown): JSONRPCRequest | Error {
+export function parseJSONRPCMessage(body: unknown): JSONRPCRequest | JSONRPCNotification | JSONRPCResponse | Error {
 	// Validate basic structure
 	if (typeof body !== "object" || body === null) {
 		return new Error("Request body must be a JSON object");
@@ -223,31 +224,49 @@ export function parseJSONRPCMessage(body: unknown): JSONRPCRequest | Error {
 		return new Error("Invalid JSON-RPC version (must be '2.0')");
 	}
 
-	// Validate method field
-	if (typeof msg.method !== "string") {
-		return new Error("Missing or invalid 'method' field");
+	if (typeof msg.method === "string") {
+		if (!("id" in msg)) {
+			return {
+				jsonrpc: "2.0",
+				method: msg.method,
+				params: msg.params,
+			} as JSONRPCNotification;
+		}
+
+		if (
+			typeof msg.id !== "string" &&
+			typeof msg.id !== "number" &&
+			msg.id !== null
+		) {
+			return new Error("Invalid 'id' field (must be string, number, or null)");
+		}
+
+		return {
+			jsonrpc: "2.0",
+			id: msg.id as string | number,
+			method: msg.method,
+			params: msg.params,
+		} as JSONRPCRequest;
 	}
 
-	// Validate id field (must be present for requests)
-	if (!("id" in msg)) {
-		return new Error("Missing 'id' field (notifications not supported)");
+	if ("id" in msg && ("result" in msg || "error" in msg)) {
+		if (
+			typeof msg.id !== "string" &&
+			typeof msg.id !== "number" &&
+			msg.id !== null
+		) {
+			return new Error("Invalid 'id' field (must be string, number, or null)");
+		}
+
+		return {
+			jsonrpc: "2.0",
+			id: msg.id as string | number,
+			...("result" in msg ? { result: msg.result } : {}),
+			...("error" in msg ? { error: msg.error } : {}),
+		} as JSONRPCResponse;
 	}
 
-	if (
-		typeof msg.id !== "string" &&
-		typeof msg.id !== "number" &&
-		msg.id !== null
-	) {
-		return new Error("Invalid 'id' field (must be string, number, or null)");
-	}
-
-	// Return as JSONRPCRequest
-	return {
-		jsonrpc: "2.0",
-		id: msg.id as string | number,
-		method: msg.method,
-		params: msg.params,
-	} as JSONRPCRequest;
+	return new Error("Invalid JSON-RPC payload");
 }
 
 /**

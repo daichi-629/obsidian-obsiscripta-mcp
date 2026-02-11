@@ -480,13 +480,7 @@ export class PluginClient {
 			headers["MCP-Session-Id"] = sessionId;
 		}
 
-		return this.fetchJson<JSONRPCResponse>(
-			this.mcpBaseUrl,
-			"POST",
-			body,
-			this.apiKey,
-			headers
-		);
+		return this.fetchMcpJsonRpc(this.mcpBaseUrl, body, this.apiKey, headers);
 	}
 
 	private async v1Request<T>(
@@ -496,6 +490,124 @@ export class PluginClient {
 	): Promise<T> {
 		const { response } = await this.fetchJson<T>(`${this.v1BaseUrl}${path}`, method, body, "");
 		return response;
+	}
+
+	private parseSSEData(raw: string): JSONRPCResponse {
+		let latestDataLine: string | null = null;
+		const events = raw.split("\n\n");
+		for (const event of events) {
+			const dataLines = event
+				.split("\n")
+				.filter((line) => line.startsWith("data:"))
+				.map((line) => line.slice(5).trimStart());
+			if (dataLines.length > 0) {
+				const data = dataLines.join("\n");
+				if (data.length > 0) {
+					latestDataLine = data;
+				}
+			}
+		}
+
+		if (!latestDataLine) {
+			throw new PluginClientError("SSE stream did not include a JSON-RPC message", 502, "INVALID_MCP_RESPONSE");
+		}
+
+		try {
+			return JSON.parse(latestDataLine) as JSONRPCResponse;
+		} catch (error) {
+			throw new PluginClientError(
+				`Invalid SSE JSON response: ${error instanceof Error ? error.message : String(error)}`,
+				502,
+				"INVALID_JSON"
+			);
+		}
+	}
+
+	private async fetchMcpJsonRpc(
+		url: string,
+		body: unknown,
+		apiKey: string,
+		extraHeaders: Record<string, string> = {}
+	): Promise<{ response: JSONRPCResponse; headers: Headers }> {
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+		try {
+			const headers: Record<string, string> = {
+				"Content-Type": "application/json",
+				Accept: "application/json, text/event-stream",
+				...extraHeaders,
+			};
+			if (apiKey) {
+				headers["X-ObsiScripta-Api-Key"] = apiKey;
+			}
+
+			const response = await fetch(url, {
+				method: "POST",
+				headers,
+				body: JSON.stringify(body),
+				signal: controller.signal,
+			});
+
+			const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+			const text = await response.text();
+			let data: unknown = {};
+			if (text) {
+				if (contentType.includes("text/event-stream")) {
+					data = this.parseSSEData(text);
+				} else {
+					data = JSON.parse(text) as unknown;
+				}
+			}
+
+			if (!response.ok) {
+				const errorResponse = data as ErrorResponse;
+				throw new PluginClientError(
+					errorResponse.message || `HTTP ${response.status}`,
+					response.status,
+					errorResponse.error,
+					errorResponse.details
+				);
+			}
+
+			return { response: data as JSONRPCResponse, headers: response.headers };
+		} catch (error) {
+			if (error instanceof PluginClientError) {
+				throw error;
+			}
+
+			if (error instanceof Error) {
+				if (error.name === "AbortError") {
+					throw new PluginClientError(
+						`Request timeout after ${this.timeout}ms`,
+						0,
+						"TIMEOUT"
+					);
+				}
+
+				if (error instanceof SyntaxError) {
+					throw new PluginClientError(
+						`Invalid JSON response: ${error.message}`,
+						502,
+						"INVALID_JSON"
+					);
+				}
+
+				throw new PluginClientError(
+					`Network error: ${error.message}`,
+					0,
+					"NETWORK_ERROR"
+				);
+			}
+
+			throw new PluginClientError(
+				`Unknown error: ${String(error)}`,
+				0,
+				"UNKNOWN_ERROR"
+			);
+		} finally {
+			clearTimeout(timeoutId);
+		}
 	}
 
 	private async fetchJson<T>(
