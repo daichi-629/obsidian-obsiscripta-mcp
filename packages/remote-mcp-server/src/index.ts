@@ -16,7 +16,6 @@ import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
 import { loadConfig, SERVER_VERSION } from "./config.js";
 import { TokenStore } from "./store/token-store.js";
-import { RemoteMcpServer } from "./mcp/mcp-server.js";
 import {
 	createMcpTransportRoutes,
 	closeAllTransports,
@@ -36,9 +35,6 @@ async function main(): Promise<void> {
 
 	// Periodic cleanup of expired tokens
 	const cleanupTimer = setInterval(() => store.cleanup(), 60_000);
-
-	// Initialize MCP server with token store
-	const remoteMcpServer = new RemoteMcpServer(store);
 
 	// Build Hono application
 	const app = new Hono();
@@ -78,7 +74,7 @@ async function main(): Promise<void> {
 	const resourceMetadataUrl = `${config.externalUrl}/.well-known/oauth-protected-resource`;
 	app.use("/mcp", requireAuth(store, resourceMetadataUrl));
 
-	const mcpRoutes = createMcpTransportRoutes(remoteMcpServer);
+	const mcpRoutes = createMcpTransportRoutes(store);
 	app.route("/", mcpRoutes);
 
 	// Start HTTP server
