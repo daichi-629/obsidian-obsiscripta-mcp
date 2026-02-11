@@ -54,4 +54,23 @@ describe("read_note tool", () => {
 		const result = await readNoteTool.handler({ path: "Notes/Daily" }, context);
 		expect(result.content[0]?.text).toBe("Go to [[Plan]]");
 	});
+
+	it("returns markdown body without frontmatter", async () => {
+		const sourceFile = createTFile("Notes/Daily.md", "Daily");
+		const context = {
+			vault: {
+				getAbstractFileByPath: vi.fn().mockReturnValue(sourceFile),
+				read: vi.fn().mockResolvedValue("---\ntitle: Daily\ntags:\n  - journal\n---\n# Entry\nToday"),
+			},
+			app: {
+				metadataCache: {
+					getFirstLinkpathDest: vi.fn(),
+				},
+			},
+		} as any;
+
+		const result = await readNoteTool.handler({ path: "Notes/Daily" }, context);
+		expect(result.isError).toBeUndefined();
+		expect(result.content[0]?.text).toBe("# Entry\nToday");
+	});
 });

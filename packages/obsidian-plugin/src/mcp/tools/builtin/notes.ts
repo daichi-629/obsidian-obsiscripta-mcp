@@ -1,5 +1,6 @@
 import { normalizePath, TFile } from "obsidian";
 import { MCPToolDefinition, MCPToolResult } from "../types";
+import { splitFrontmatter } from "./markdown-content";
 
 interface ObsidianLinkParts {
 	linkPath: string;
@@ -62,7 +63,7 @@ function resolveVaultLinks(
  */
 export const readNoteTool: MCPToolDefinition = {
 	name: "read_note",
-	description: "Read the content of a note from the vault. Returns the full markdown content of the specified note.",
+	description: "Read the markdown content of a note from the vault, excluding frontmatter.",
 	inputSchema: {
 		type: "object",
 		properties: {
@@ -114,7 +115,8 @@ export const readNoteTool: MCPToolDefinition = {
 
 		try {
 			const content = await context.vault.read(file);
-			const output = resolveLinks ? resolveVaultLinks(content, file.path, context) : content;
+			const { body } = splitFrontmatter(content);
+			const output = resolveLinks ? resolveVaultLinks(body, file.path, context) : body;
 			return {
 				content: [{
 					type: "text",

@@ -1,6 +1,7 @@
 import { normalizePath, TFile } from "obsidian";
 import diff_match_patch from "diff-match-patch";
 import { MCPToolDefinition, MCPToolResult } from "../types";
+import { mergeFrontmatter, splitFrontmatter } from "./markdown-content";
 
 function normalizeNotePath(path: string): string {
 	let normalizedPath = normalizePath(path);
@@ -35,7 +36,7 @@ function applyFuzzyPatch(currentContent: string, patchText: string): { ok: true;
  */
 export const editNoteTool: MCPToolDefinition = {
 	name: "edit_note",
-	description: "Apply a diff-match-patch format patch to edit a note in the vault.",
+	description: "Apply a diff-match-patch format patch to markdown content in a note, excluding frontmatter.",
 	inputSchema: {
 		type: "object",
 		properties: {
@@ -45,7 +46,7 @@ export const editNoteTool: MCPToolDefinition = {
 			},
 			patch: {
 				type: "string",
-				description: "Patch to apply in diff-match-patch text format."
+				description: "Patch to apply in diff-match-patch text format against markdown body content (frontmatter excluded)."
 			},
 			create: {
 				type: "boolean",
@@ -134,7 +135,8 @@ export const editNoteTool: MCPToolDefinition = {
 		try {
 			// Read the current content
 			const currentContent = file ? await context.vault.read(file) : "";
-			const fuzzyResult = applyFuzzyPatch(currentContent, patch);
+			const { frontmatter, body } = splitFrontmatter(currentContent);
+			const fuzzyResult = applyFuzzyPatch(body, patch);
 			if (!fuzzyResult.ok) {
 				return {
 					content: [{
@@ -144,9 +146,10 @@ export const editNoteTool: MCPToolDefinition = {
 					isError: true
 				};
 			}
-			const nextContent = fuzzyResult.content;
+			const nextBodyContent = fuzzyResult.content;
+			const nextContent = mergeFrontmatter(frontmatter, nextBodyContent);
 
-			if (nextContent === currentContent) {
+			if (nextBodyContent === body) {
 				return {
 					content: [{
 						type: "text",
