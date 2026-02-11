@@ -141,17 +141,6 @@ export class MCPSettingTab extends PluginSettingTab {
 
 
 		new Setting(containerEl)
-			.setName("Enable bridge v1 API")
-			.setDesc("Expose legacy unauthenticated endpoints under /bridge/v1 (requires restart)")
-			.addToggle((toggle) =>
-				toggle
-					.setValue(settings.enableBridgeV1)
-					.onChange(async (value) => {
-						await this.settingsStore.updateSetting("enableBridgeV1", value);
-					}),
-			);
-
-		new Setting(containerEl)
 			.setName("Port")
 			.setDesc("The port number for the server (requires restart)")
 			.addText((text) =>
@@ -195,9 +184,7 @@ export class MCPSettingTab extends PluginSettingTab {
 		new Setting(containerEl).setName("Mcp authentication").setHeading();
 
 		containerEl.createEl("p", {
-			text: settings.enableBridgeV1
-				? "Mcp standard (/mcp) requires an API key. Bridge v1 (/bridge/v1) is enabled and remains unauthenticated for compatibility."
-				: "Mcp standard (/mcp) requires an API key. Bridge v1 (/bridge/v1) is currently disabled.",
+			text: "Mcp standard (/mcp) requires an API key.",
 			cls: "setting-item-description",
 		});
 
@@ -319,7 +306,16 @@ export class MCPSettingTab extends PluginSettingTab {
 					toggle.setValue(this.toolingManager.isToolEnabled(toolName));
 					toggle.onChange(async (value) => {
 						await this.settingsStore.setToolEnabled(toolName, value);
-						// ToolingManager is automatically updated via settingsStore.on("change")
+					});
+				});
+
+			new Setting(containerEl)
+				.setName(`${toolName} (Search index)`)
+				.setDesc("Include this tool in built-in tool search results")
+				.addToggle((toggle) => {
+					toggle.setValue(this.toolingManager.isToolIncludedInSearch(toolName));
+					toggle.onChange(async (value) => {
+						await this.settingsStore.setToolIncludedInSearch(toolName, value);
 					});
 				});
 		};

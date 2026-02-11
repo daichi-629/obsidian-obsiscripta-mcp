@@ -47,7 +47,8 @@ describe("ToolingManager - Settings Integration", () => {
 			settings,
 			mockPlugin, // eventRegistrar
 			"",
-			settings.disabledTools
+			settings.disabledTools,
+			settings.searchExcludedTools
 		);
 
 		// Inject mock script loader
@@ -94,6 +95,34 @@ describe("ToolingManager - Settings Integration", () => {
 
 			// Should not throw, error should be logged
 			expect(mockScriptLoader.updateScriptsPath).toHaveBeenCalled();
+		});
+	});
+
+
+	describe("searchExcludedTools change detection", () => {
+		it("should exclude tool from search when added to searchExcludedTools", async () => {
+			const setIncludedSpy = vi.spyOn(toolingManager, "setToolIncludedInSearch");
+
+			toolingManager.subscribeToSettings(settingsStore);
+
+			await settingsStore.setToolIncludedInSearch("myTool", false);
+
+			await new Promise((resolve) => setTimeout(resolve, 10));
+
+			expect(setIncludedSpy).toHaveBeenCalledWith("myTool", false);
+		});
+
+		it("should include tool in search when removed from searchExcludedTools", async () => {
+			await settingsStore.updateSetting("searchExcludedTools", ["myTool"]);
+			const setIncludedSpy = vi.spyOn(toolingManager, "setToolIncludedInSearch");
+
+			toolingManager.subscribeToSettings(settingsStore);
+
+			await settingsStore.setToolIncludedInSearch("myTool", true);
+
+			await new Promise((resolve) => setTimeout(resolve, 10));
+
+			expect(setIncludedSpy).toHaveBeenCalledWith("myTool", true);
 		});
 	});
 

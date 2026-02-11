@@ -5,6 +5,7 @@ import { MCPToolDefinition } from "../mcp/tools/types";
 import { ToolRegistry, ToolSource } from "../mcp/tools/registry";
 import { getBuiltinNoteTools } from "../mcp/tools/builtin/notes";
 import { getBuiltinEditTools } from "../mcp/tools/builtin/edit";
+import { getBuiltinToolManagementTools } from "../mcp/tools/builtin/tool-management";
 import {
 	ScriptLoader,
 	ScriptRegistry,
@@ -15,6 +16,7 @@ import { ExampleManager } from "../mcp/tools/scripting/example-manager";
 import { EventRegistrar, ScriptExecutionContext } from "./context";
 import { SettingsStore } from "../settings/settings-store";
 import { EventRef } from "../settings/setting-store-base";
+import { createSessionContext } from "../mcp/tools/session-store";
 
 // Coordinates built-in and script tool lifecycle + registry state.
 export class ToolingManager {
@@ -37,15 +39,21 @@ export class ToolingManager {
 		settings: MCPPluginSettings,
 		eventRegistrar: EventRegistrar,
 		exampleSourcePath: string,
-		disabledTools: string[]
+		disabledTools: string[],
+		searchExcludedTools: string[],
 	) {
 		this.vault = vault;
 		this.app = app;
 		this.settings = settings;
 		this.eventRegistrar = eventRegistrar;
-		this.scriptContext = { vault, app, plugin };
+		this.scriptContext = {
+			vault,
+			app,
+			plugin,
+			session: createSessionContext("script-loader-default"),
+		};
 		this.exampleSourcePath = exampleSourcePath;
-		this.registry = new ToolRegistry(disabledTools);
+		this.registry = new ToolRegistry(disabledTools, searchExcludedTools);
 	}
 
 	async start(): Promise<void> {
@@ -53,6 +61,9 @@ export class ToolingManager {
 			this.registry.register(tool, ToolSource.Builtin);
 		}
 		for (const tool of getBuiltinEditTools()) {
+			this.registry.register(tool, ToolSource.Builtin);
+		}
+		for (const tool of getBuiltinToolManagementTools(this.registry)) {
 			this.registry.register(tool, ToolSource.Builtin);
 		}
 
@@ -136,6 +147,14 @@ export class ToolingManager {
 		this.registry.setEnabled(name, enabled);
 	}
 
+	isToolIncludedInSearch(name: string): boolean {
+		return this.registry.isIncludedInSearch(name);
+	}
+
+	setToolIncludedInSearch(name: string, included: boolean): void {
+		this.registry.setIncludedInSearch(name, included);
+	}
+
 	async updateScriptsPath(scriptsPath: string): Promise<string> {
 		const normalizedPath = ScriptLoader.normalizeScriptsPath(scriptsPath);
 		if (!this.scriptLoader) {
@@ -190,6 +209,21 @@ export class ToolingManager {
 				for (const tool of oldDisabled) {
 					if (!newDisabled.has(tool)) {
 						this.setToolEnabled(tool, true);
+					}
+				}
+
+				const oldSearchExcluded = new Set(oldSettings.searchExcludedTools);
+				const newSearchExcluded = new Set(newSettings.searchExcludedTools);
+
+				for (const tool of newSearchExcluded) {
+					if (!oldSearchExcluded.has(tool)) {
+						this.setToolIncludedInSearch(tool, false);
+					}
+				}
+
+				for (const tool of oldSearchExcluded) {
+					if (!newSearchExcluded.has(tool)) {
+						this.setToolIncludedInSearch(tool, true);
 					}
 				}
 			})();

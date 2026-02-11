@@ -2,14 +2,15 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serve, ServerType } from "@hono/node-server";
 import type { Socket } from "net";
+import { randomUUID } from "crypto";
 import { ToolExecutor } from "./tools/executor";
-import { ToolCallRequest } from "./bridge-types";
 import {
 	handleMCPRequest,
 	parseJSONRPCMessage,
 	createParseErrorResponse,
 	createInvalidRequestResponse,
 } from "./mcp-api";
+import { deleteSessionStore } from "./tools/session-store";
 
 export class BridgeServer {
 	private static readonly MAX_BODY_BYTES = 1024 * 1024;
@@ -17,7 +18,7 @@ export class BridgeServer {
 	private sockets = new Set<Socket>();
 	private readonly executor: ToolExecutor;
 	private readonly mcpApiKeys: ReadonlySet<string>;
-	private readonly enableBridgeV1: boolean;
+	private readonly mcpSessions = new Map<string, { createdAt: number; lastAccessedAt: number }>();
 	private port: number;
 	private host: string;
 	private app: Hono;
@@ -26,13 +27,11 @@ export class BridgeServer {
 		executor: ToolExecutor,
 		port: number = 3000,
 		host: string = "127.0.0.1",
-		enableBridgeV1: boolean = true,
 		mcpApiKeys: readonly string[] = [],
 	) {
 		this.executor = executor;
 		this.port = port;
 		this.host = host;
-		this.enableBridgeV1 = enableBridgeV1;
 		this.mcpApiKeys = new Set(mcpApiKeys);
 		this.app = this.createApp();
 	}
@@ -58,128 +57,48 @@ export class BridgeServer {
 		return token.trim();
 	}
 
+	private isInitializeRequest(body: unknown): boolean {
+		if (typeof body !== "object" || body === null) {
+			return false;
+		}
+
+		const payload = body as { method?: unknown };
+		return payload.method === "initialize";
+	}
+
+	private createSessionId(): string {
+		return randomUUID();
+	}
+
+	private getSessionFromHeader(sessionIdHeader: string | undefined): string | null {
+		if (!sessionIdHeader || sessionIdHeader.trim().length === 0) {
+			return null;
+		}
+
+		const sessionId = sessionIdHeader.trim();
+		for (let i = 0; i < sessionId.length; i += 1) {
+			const code = sessionId.charCodeAt(i);
+			if (code < 0x21 || code > 0x7e) {
+				return null;
+			}
+		}
+
+		return sessionId;
+	}
+
 	/**
 	 * Create and configure Hono app
 	 */
 	private createApp(): Hono {
 		const app = new Hono();
 
-		if (this.enableBridgeV1) {
-			// CORS middleware for v1 API
-			app.use(
-				"/bridge/v1/*",
-				cors({
-					origin: "*",
-					allowMethods: ["GET", "POST", "OPTIONS"],
-					allowHeaders: ["Content-Type"],
-				}),
-			);
-
-			// Body size limit middleware for v1 API
-			app.use("/bridge/v1/*", async (c, next) => {
-				const contentLength = c.req.header("content-length");
-				if (
-					contentLength &&
-					parseInt(contentLength) > BridgeServer.MAX_BODY_BYTES
-				) {
-					return c.json(
-						{
-							error: "Request body too large",
-							message: "Request body too large",
-						},
-						413,
-					);
-				}
-				return await next();
-			});
-
-			// Health endpoint
-			app.get("/bridge/v1/health", (c) => {
-				return c.json(this.executor.getHealth());
-			});
-
-			// Tools list endpoint
-			app.get("/bridge/v1/tools", (c) => {
-				return c.json(this.executor.getTools());
-			});
-
-			// Tool call endpoint
-			app.post("/bridge/v1/tools/:toolName/call", async (c) => {
-				const toolName = c.req.param("toolName");
-
-				if (!this.executor.isToolAvailable(toolName)) {
-					return c.json(
-						{
-							error: "Tool not found",
-							message: "Tool not found",
-						},
-						404,
-					);
-				}
-
-				let payload: ToolCallRequest;
-				try {
-					payload = await c.req.json<ToolCallRequest>();
-				} catch (error) {
-					const message =
-						error instanceof Error ? error.message : String(error);
-					return c.json(
-						{
-							error: "Invalid request body",
-							message: "Invalid request body",
-							details: message,
-						},
-						400,
-					);
-				}
-
-				const hasArguments =
-					payload &&
-					typeof payload === "object" &&
-					"arguments" in payload;
-				const argsValue = hasArguments ? payload.arguments : null;
-				if (
-					!hasArguments ||
-					!argsValue ||
-					typeof argsValue !== "object" ||
-					Array.isArray(argsValue)
-				) {
-					return c.json(
-						{
-							error: "Invalid request body",
-							message: "Invalid request body",
-						},
-						400,
-					);
-				}
-
-				try {
-					const response = await this.executor.executeToolCall(
-						toolName,
-						argsValue,
-					);
-					return c.json(response);
-				} catch (error) {
-					return c.json(
-						{
-							error: "Internal server error",
-							message: "Internal server error",
-							details:
-								error instanceof Error ? error.message : String(error),
-						},
-						500,
-					);
-				}
-			});
-		}
-
 		// CORS middleware for MCP standard HTTP
 		app.use(
 			"/mcp",
 			cors({
 				origin: "*",
-				allowMethods: ["GET", "POST", "OPTIONS"],
-				allowHeaders: ["Content-Type", "Mcp-Session-Id", "Authorization", "X-ObsiScripta-Api-Key"],
+				allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
+				allowHeaders: ["Content-Type", "MCP-Session-Id", "Authorization", "X-ObsiScripta-Api-Key"],
 			}),
 		);
 
@@ -236,6 +155,33 @@ export class BridgeServer {
 			return await next();
 		});
 
+		app.delete("/mcp", async (c) => {
+			const sessionId = this.getSessionFromHeader(c.req.header("mcp-session-id"));
+			if (!sessionId) {
+				return c.json(
+					{
+						error: "Missing MCP session",
+						message: "MCP-Session-Id header is required",
+					},
+					400,
+				);
+			}
+
+			if (!this.mcpSessions.has(sessionId)) {
+				return c.json(
+					{
+						error: "Session not found",
+						message: "Session not found",
+					},
+					404,
+				);
+			}
+
+			this.mcpSessions.delete(sessionId);
+			deleteSessionStore(sessionId);
+			return c.body(null, 204);
+		});
+
 		// MCP Standard HTTP endpoint (JSON-RPC over HTTP)
 		app.post("/mcp", async (c) => {
 			// Parse request body
@@ -245,6 +191,51 @@ export class BridgeServer {
 			} catch {
 				const errorResponse = createParseErrorResponse();
 				return c.json(errorResponse, 400);
+			}
+
+			const providedSessionId = this.getSessionFromHeader(
+				c.req.header("mcp-session-id")
+			);
+
+			if (c.req.header("mcp-session-id") && !providedSessionId) {
+				return c.json(
+					{
+						error: "Invalid MCP session",
+						message: "MCP-Session-Id must contain only visible ASCII characters",
+					},
+					400,
+				);
+			}
+
+			if (providedSessionId && !this.mcpSessions.has(providedSessionId)) {
+				return c.json(
+					{
+						error: "Session not found",
+						message: "Session not found",
+					},
+					404,
+				);
+			}
+
+			const isInitialize = this.isInitializeRequest(body);
+			if (!isInitialize && !providedSessionId) {
+				return c.json(
+					{
+						error: "Missing MCP session",
+						message: "MCP-Session-Id header is required after initialize",
+					},
+					400,
+				);
+			}
+
+			if (isInitialize && providedSessionId) {
+				return c.json(
+					{
+						error: "Invalid initialize request",
+						message: "Initialize requests must not include MCP-Session-Id",
+					},
+					400,
+				);
 			}
 
 			// Parse JSON-RPC message
@@ -260,11 +251,28 @@ export class BridgeServer {
 
 			// Handle the request
 			try {
+				const contextSessionId = providedSessionId ?? randomUUID();
 				const response = await handleMCPRequest(
 					request,
 					this.executor.getRegistry(),
-					this.executor.getContext()
+					this.executor.getContext(contextSessionId)
 				);
+
+				if (isInitialize) {
+					const sessionId = this.createSessionId();
+					const now = Date.now();
+					this.mcpSessions.set(sessionId, {
+						createdAt: now,
+						lastAccessedAt: now,
+					});
+					deleteSessionStore(contextSessionId);
+					c.header("MCP-Session-Id", sessionId);
+				} else if (providedSessionId) {
+					const session = this.mcpSessions.get(providedSessionId);
+					if (session) {
+						session.lastAccessedAt = Date.now();
+					}
+				}
 
 				// For Phase 1, we return application/json (no SSE streaming)
 				// Phase 2+ will add SSE support when needed
@@ -349,11 +357,6 @@ export class BridgeServer {
 						console.debug(
 							`[Bridge] Server started on http://${info.address}:${info.port}`,
 						);
-						if (this.enableBridgeV1) {
-							console.debug(
-								`[Bridge] - v1 API: http://${info.address}:${info.port}/bridge/v1`,
-							);
-						}
 						console.debug(
 							`[Bridge] - MCP Standard: http://${info.address}:${info.port}/mcp`,
 						);

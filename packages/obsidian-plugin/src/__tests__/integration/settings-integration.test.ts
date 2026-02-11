@@ -46,7 +46,6 @@ describe("Settings Integration", () => {
 				autoStart: settings.autoStart,
 				port: settings.port,
 				bindHost: settings.bindHost,
-				enableBridgeV1: settings.enableBridgeV1,
 				mcpApiKeys: [...settings.mcpApiKeys],
 			},
 			mockToolRegistry as any
@@ -66,7 +65,6 @@ describe("Settings Integration", () => {
 			autoStart: settings.autoStart,
 			port: settings.port,
 			bindHost: settings.bindHost,
-			enableBridgeV1: settings.enableBridgeV1,
 			mcpApiKeys: [...settings.mcpApiKeys],
 		};
 
@@ -86,7 +84,8 @@ describe("Settings Integration", () => {
 			settings,
 			mockPlugin as any,
 			"",
-			settings.disabledTools
+			settings.disabledTools,
+			settings.searchExcludedTools
 		);
 
 		// @ts-ignore
@@ -112,11 +111,6 @@ describe("Settings Integration", () => {
 			expect(bridgeController.needsRestart()).toBe(true);
 		});
 
-		it("should detect restart needed when enableBridgeV1 changes", async () => {
-			await settingsStore.updateSetting("enableBridgeV1", false);
-
-			expect(bridgeController.needsRestart()).toBe(true);
-		});
 
 		it("should detect restart needed when API keys change", async () => {
 			await settingsStore.issueMcpApiKey();
@@ -127,8 +121,7 @@ describe("Settings Integration", () => {
 		it("should handle multiple bridge setting changes", async () => {
 			await settingsStore.updateSetting("port", 5000);
 			await settingsStore.updateSetting("bindHost", "localhost");
-			await settingsStore.updateSetting("enableBridgeV1", false);
-
+			
 			expect(bridgeController.needsRestart()).toBe(true);
 		});
 	});

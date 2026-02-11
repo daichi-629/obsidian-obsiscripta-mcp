@@ -5,10 +5,9 @@
  * Claude Desktop → (Streamable HTTP MCP) → This Server → HTTP(S) → Obsidian Plugin
  *
  * This server:
- * 1. Exposes MCP tools via Streamable HTTP transport
- * 2. Authenticates Claude Desktop via OAuth 2.1 (GitHub login)
- * 3. Proxies tool calls to the Obsidian plugin's Bridge API
- * 4. Provides an admin API for managing plugin connection tokens
+ * 1. Authenticates Claude Desktop via OAuth 2.1 (GitHub login)
+ * 2. Transparently proxies Streamable HTTP MCP traffic to the Obsidian plugin
+ * 3. Provides an admin API for managing plugin connection tokens
  */
 
 import { Hono } from "hono";
@@ -16,7 +15,6 @@ import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
 import { loadConfig, SERVER_VERSION } from "./config.js";
 import { TokenStore } from "./store/token-store.js";
-import { RemoteMcpServer } from "./mcp/mcp-server.js";
 import {
 	createMcpTransportRoutes,
 	closeAllTransports,
@@ -36,9 +34,6 @@ async function main(): Promise<void> {
 
 	// Periodic cleanup of expired tokens
 	const cleanupTimer = setInterval(() => store.cleanup(), 60_000);
-
-	// Initialize MCP server with token store
-	const remoteMcpServer = new RemoteMcpServer(store);
 
 	// Build Hono application
 	const app = new Hono();
@@ -78,7 +73,7 @@ async function main(): Promise<void> {
 	const resourceMetadataUrl = `${config.externalUrl}/.well-known/oauth-protected-resource`;
 	app.use("/mcp", requireAuth(store, resourceMetadataUrl));
 
-	const mcpRoutes = createMcpTransportRoutes(remoteMcpServer);
+	const mcpRoutes = createMcpTransportRoutes(store);
 	app.route("/", mcpRoutes);
 
 	// Start HTTP server

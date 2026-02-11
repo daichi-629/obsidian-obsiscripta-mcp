@@ -17,6 +17,28 @@ import type {
 } from "./mcp-types";
 import { JSONRPCErrorCode } from "./mcp-types";
 
+const MCP_PROTOCOL_VERSION = "2025-03-26";
+const MCP_SERVER_INFO = {
+	name: "obsiscripta-bridge-plugin",
+	version: "0.2.0",
+};
+
+function handleMCPInitialize(request: JSONRPCRequest): JSONRPCResponse {
+	return {
+		jsonrpc: "2.0",
+		id: request.id,
+		result: {
+			protocolVersion: MCP_PROTOCOL_VERSION,
+			capabilities: {
+				tools: {
+					listChanged: false,
+				},
+			},
+			serverInfo: MCP_SERVER_INFO,
+		},
+	};
+}
+
 /**
  * Handle tools/list JSON-RPC request
  */
@@ -163,6 +185,9 @@ export async function handleMCPRequest(
 	context: AppContext
 ): Promise<JSONRPCResponse> {
 	switch (request.method) {
+		case "initialize":
+			return handleMCPInitialize(request);
+
 		case "tools/list":
 			return handleMCPToolsList(request as ToolsListRequest, registry);
 

@@ -38,6 +38,7 @@ export default class MCPPlugin extends Plugin {
 			this,
 			exampleSourcePath,
 			this.settings.disabledTools,
+			this.settings.searchExcludedTools,
 		);
 		await this.toolingManager.start();
 
@@ -48,7 +49,6 @@ export default class MCPPlugin extends Plugin {
 				autoStart: this.settings.autoStart,
 				port: this.settings.port,
 				bindHost: this.settings.bindHost,
-				enableBridgeV1: this.settings.enableBridgeV1,
 				mcpApiKeys: [...this.settings.mcpApiKeys],
 			},
 			this.toolingManager.registry,

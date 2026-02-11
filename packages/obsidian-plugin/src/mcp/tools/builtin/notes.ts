@@ -1,5 +1,6 @@
 import { normalizePath, TFile } from "obsidian";
 import { MCPToolDefinition, MCPToolResult } from "../types";
+import { getReadSessionKey } from "./note-session";
 
 interface ObsidianLinkParts {
 	linkPath: string;
@@ -114,6 +115,7 @@ export const readNoteTool: MCPToolDefinition = {
 
 		try {
 			const content = await context.vault.read(file);
+			context.session.set(getReadSessionKey(normalizedPath), true);
 			const output = resolveLinks ? resolveVaultLinks(content, file.path, context) : content;
 			return {
 				content: [{
