@@ -9,14 +9,14 @@ function createTFile(path: string, basename: string): TFile {
 }
 
 describe("read_note tool", () => {
-	it("resolves wiki links when resolveLinks=true", async () => {
+	it("returns section payload as JSON and resolves wiki links", async () => {
 		const sourceFile = createTFile("Notes/Daily.md", "Daily");
 		const targetFile = createTFile("Projects/Plan.md", "Plan");
 
 		const context = {
 			vault: {
 				getAbstractFileByPath: vi.fn().mockReturnValue(sourceFile),
-				read: vi.fn().mockResolvedValue("Go to [[Plan]] and [[Plan#Roadmap|roadmap section]]"),
+				read: vi.fn().mockResolvedValue("# Entry\nGo to [[Plan]] and [[Plan#Roadmap|roadmap section]]"),
 			},
 			app: {
 				metadataCache: {
@@ -30,37 +30,26 @@ describe("read_note tool", () => {
 			},
 		} as any;
 
-		const result = await readNoteTool.handler({ path: "Notes/Daily", resolveLinks: true }, context);
+		const result = await readNoteTool.handler({ path: "Notes/Daily", section: "Entry", mode: "content" }, context);
 		expect(result.isError).toBeUndefined();
 		expect(result.content[0]?.text).toBe(
-			"Go to [Plan](Projects/Plan.md) and [roadmap section](Projects/Plan.md#Roadmap)",
+			JSON.stringify({
+				title: "Entry",
+				level: 1,
+				content: "Go to [Plan](Projects/Plan.md) and [roadmap section](Projects/Plan.md#Roadmap)",
+				start_line: 1,
+				end_line: 2,
+				truncated: false,
+			}, null, 2),
 		);
 	});
 
-	it("keeps original markdown when resolveLinks is omitted", async () => {
+	it("returns first matching heading when level is omitted", async () => {
 		const sourceFile = createTFile("Notes/Daily.md", "Daily");
 		const context = {
 			vault: {
 				getAbstractFileByPath: vi.fn().mockReturnValue(sourceFile),
-				read: vi.fn().mockResolvedValue("Go to [[Plan]]"),
-			},
-			app: {
-				metadataCache: {
-					getFirstLinkpathDest: vi.fn().mockReturnValue(createTFile("Projects/Plan.md", "Plan")),
-				},
-			},
-		} as any;
-
-		const result = await readNoteTool.handler({ path: "Notes/Daily" }, context);
-		expect(result.content[0]?.text).toBe("Go to [[Plan]]");
-	});
-
-	it("returns markdown body without frontmatter", async () => {
-		const sourceFile = createTFile("Notes/Daily.md", "Daily");
-		const context = {
-			vault: {
-				getAbstractFileByPath: vi.fn().mockReturnValue(sourceFile),
-				read: vi.fn().mockResolvedValue("---\ntitle: Daily\ntags:\n  - journal\n---\n# Entry\nToday"),
+				read: vi.fn().mockResolvedValue("# Target\nA\n## Target\nB"),
 			},
 			app: {
 				metadataCache: {
@@ -69,8 +58,60 @@ describe("read_note tool", () => {
 			},
 		} as any;
 
-		const result = await readNoteTool.handler({ path: "Notes/Daily" }, context);
+		const result = await readNoteTool.handler({ path: "Notes/Daily", section: "Target", mode: "header" }, context);
+		expect(result.content[0]?.text).toContain('"level": 1');
+		expect(result.content[0]?.text).toContain('"start_line": 1');
+	});
+
+	it("removes frontmatter and can exclude subsection heading lines", async () => {
+		const sourceFile = createTFile("Notes/Daily.md", "Daily");
+		const context = {
+			vault: {
+				getAbstractFileByPath: vi.fn().mockReturnValue(sourceFile),
+				read: vi.fn().mockResolvedValue("---\ntitle: Daily\ntags:\n  - journal\n---\n# Entry\nToday\n## Sub\nChild"),
+			},
+			app: {
+				metadataCache: {
+					getFirstLinkpathDest: vi.fn(),
+				},
+			},
+		} as any;
+
+		const result = await readNoteTool.handler({
+			path: "Notes/Daily",
+			section: "Entry",
+			mode: "content",
+			include_subsections: false,
+		}, context);
 		expect(result.isError).toBeUndefined();
-		expect(result.content[0]?.text).toBe("# Entry\nToday");
+		expect(result.content[0]?.text).toBe(
+			JSON.stringify({
+				title: "Entry",
+				level: 1,
+				content: "Today\nChild",
+				start_line: 1,
+				end_line: 4,
+				truncated: false,
+			}, null, 2),
+		);
+	});
+
+	it("returns error when section is not found", async () => {
+		const sourceFile = createTFile("Notes/Daily.md", "Daily");
+		const context = {
+			vault: {
+				getAbstractFileByPath: vi.fn().mockReturnValue(sourceFile),
+				read: vi.fn().mockResolvedValue("# Entry\nToday"),
+			},
+			app: {
+				metadataCache: {
+					getFirstLinkpathDest: vi.fn(),
+				},
+			},
+		} as any;
+
+		const result = await readNoteTool.handler({ path: "Notes/Daily", section: "Missing" }, context);
+		expect(result.isError).toBe(true);
+		expect(result.content[0]?.text).toBe('Error: Section "Missing" not found.');
 	});
 });
