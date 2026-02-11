@@ -27,10 +27,16 @@ export class ObsidianVaultAdapter implements ScriptHost {
 			throw new Error(`File not found or is not a file: ${path}`);
 		}
 
-		const contents = await this.vault.read(file);
+		const rawContents = await this.vault.read(file);
+		const lowerPath = path.toLowerCase();
+		const contents = lowerPath.endsWith(".md")
+			? this.extractJavaScriptBlocks(rawContents, path)
+			: rawContents;
+
 		return {
 			contents,
 			mtime: file.stat?.mtime ?? 0,
+			loaderType: "js",
 		};
 	}
 
@@ -55,7 +61,7 @@ export class ObsidianVaultAdapter implements ScriptHost {
 			for (const child of folder.children) {
 				if (child instanceof TFolder) {
 					stack.push(child);
-				} else if (child instanceof TFile && this.isScriptFile(child.path)) {
+				} else if (child instanceof TFile && this.isScriptCandidate(child.path)) {
 					results.push(child.path);
 				}
 			}
@@ -149,9 +155,28 @@ export class ObsidianVaultAdapter implements ScriptHost {
 		}
 	}
 
-	private isScriptFile(filePath: string): boolean {
+	private isScriptCandidate(filePath: string): boolean {
 		const lowerPath = filePath.toLowerCase();
-		return lowerPath.endsWith(".js") || (lowerPath.endsWith(".ts") && !lowerPath.endsWith(".d.ts"));
+		return lowerPath.endsWith(".js") || lowerPath.endsWith(".md");
+	}
+
+	private extractJavaScriptBlocks(contents: string, path: string): string {
+		const codeBlockRegex = /^```(?:js|javascript)\s*\n([\s\S]*?)\n```/gim;
+		const blocks: string[] = [];
+
+		let match: RegExpExecArray | null = null;
+		while ((match = codeBlockRegex.exec(contents)) !== null) {
+			const code = match[1]?.trim();
+			if (code) {
+				blocks.push(code);
+			}
+		}
+
+		if (blocks.length === 0) {
+			throw new Error(`No JavaScript code block found in markdown script: ${path}`);
+		}
+
+		return blocks.join("\n\n");
 	}
 
 	private isInFolder(filePath: string, folderPath: string): boolean {
