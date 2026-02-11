@@ -84,6 +84,7 @@ export interface MCPSessionInfo {
 	sessionId: string;
 	createdAt: number;
 	lastAccessedAt: number;
+	readNotePaths: Set<string>;
 }
 
 // Type guards

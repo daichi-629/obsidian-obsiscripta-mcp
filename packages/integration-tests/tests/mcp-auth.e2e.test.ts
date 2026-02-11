@@ -124,4 +124,154 @@ describe('BridgeServer MCP authentication E2E', () => {
     const v1Tools = (await v1ToolsResponse.json()) as { tools?: Array<{ name: string }> };
     expect(v1Tools.tools?.some((tool) => tool.name === 'echo')).toBe(true);
   });
+
+
+  it('returns an error when edit_note is called before read_note in the same session', async () => {
+    const toolRegistry = new ToolRegistry();
+    toolRegistry.register(
+      {
+        name: 'read_note',
+        description: 'Read note',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            path: { type: 'string' },
+          },
+          required: ['path'],
+        },
+        async handler() {
+          return {
+            content: [{ type: 'text', text: 'ok' }],
+          };
+        },
+      },
+      ToolSource.Builtin,
+    );
+    toolRegistry.register(
+      {
+        name: 'edit_note',
+        description: 'Edit note',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            path: { type: 'string' },
+            patch: { type: 'string' },
+          },
+          required: ['path', 'patch'],
+        },
+        async handler() {
+          return {
+            content: [{ type: 'text', text: 'edited' }],
+          };
+        },
+      },
+      ToolSource.Builtin,
+    );
+
+    const executor = new ToolExecutor(toolRegistry, { vault: {}, app: {} } as never);
+
+    const port = await getFreePort();
+    const apiKey = 'obsi_test_key';
+    const server = new BridgeServer(executor, port, '127.0.0.1', true, [apiKey]);
+    await server.start();
+    cleanup.push(() => server.stop());
+
+    const baseUrl = `http://127.0.0.1:${port}`;
+
+    const initResponse = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-obsiscripta-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-03-26',
+          capabilities: {},
+          clientInfo: { name: 'test-client', version: '1.0.0' },
+        },
+      }),
+    });
+    const sessionId = initResponse.headers.get('mcp-session-id');
+    expect(sessionId).toBeTruthy();
+
+    const editBeforeRead = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-obsiscripta-api-key': apiKey,
+        'mcp-session-id': sessionId!,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/call',
+        params: {
+          name: 'edit_note',
+          arguments: {
+            path: 'Notes/Daily',
+            patch: '@@ -0,0 +1 @@\n+Hello\n',
+          },
+        },
+      }),
+    });
+    expect(editBeforeRead.status).toBe(200);
+    const editBeforeReadBody = (await editBeforeRead.json()) as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(editBeforeReadBody.result?.isError).toBe(true);
+    expect(editBeforeReadBody.result?.content?.[0]?.text).toContain('read_note must be called before edit_note');
+
+    const readResponse = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-obsiscripta-api-key': apiKey,
+        'mcp-session-id': sessionId!,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 3,
+        method: 'tools/call',
+        params: {
+          name: 'read_note',
+          arguments: {
+            path: 'Notes/Daily',
+          },
+        },
+      }),
+    });
+    expect(readResponse.status).toBe(200);
+
+    const editAfterRead = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-obsiscripta-api-key': apiKey,
+        'mcp-session-id': sessionId!,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 4,
+        method: 'tools/call',
+        params: {
+          name: 'edit_note',
+          arguments: {
+            path: 'Notes/Daily',
+            patch: '@@ -0,0 +1 @@\n+Hello\n',
+          },
+        },
+      }),
+    });
+    expect(editAfterRead.status).toBe(200);
+    const editAfterReadBody = (await editAfterRead.json()) as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(editAfterReadBody.result?.isError).toBe(false);
+    expect(editAfterReadBody.result?.content?.[0]?.text).toBe('edited');
+  });
+
 });

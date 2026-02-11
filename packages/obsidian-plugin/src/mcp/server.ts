@@ -12,6 +12,19 @@ import {
 } from "./mcp-api";
 import { MCPSessionStore } from "./session-store";
 
+
+function normalizeNotePath(path: string): string {
+	const normalizedSegments = path
+		.replaceAll("\\", "/")
+		.split("/")
+		.filter((segment) => segment.length > 0 && segment !== ".");
+	let normalizedPath = normalizedSegments.join("/");
+	if (!normalizedPath.toLowerCase().endsWith(".md")) {
+		normalizedPath = `${normalizedPath}.md`;
+	}
+	return normalizedPath;
+}
+
 export class BridgeServer {
 	private static readonly MAX_BODY_BYTES = 1024 * 1024;
 	private httpServer: ServerType | null = null;
@@ -308,6 +321,33 @@ export class BridgeServer {
 						400
 					);
 				}
+
+				if (request.method === "tools/call") {
+					const params = (request.params ?? {}) as Record<string, unknown>;
+					if (params.name === "edit_note") {
+						const args = (params.arguments ?? {}) as Record<string, unknown>;
+						const rawPath = args.path;
+						if (typeof rawPath === "string") {
+							const normalizedPath = normalizeNotePath(rawPath);
+							if (!this.mcpSessions.hasReadNote(existingSessionId, normalizedPath)) {
+								return c.json(
+									{
+										jsonrpc: "2.0",
+										id: request.id,
+										result: {
+											content: [{
+												type: "text",
+												text: `Error: read_note must be called before edit_note for "${normalizedPath}" in this session.`,
+											}],
+											isError: true,
+										},
+									},
+									200
+								);
+							}
+						}
+					}
+				}
 			}
 
 			let sessionIdToReturn: string | undefined;
@@ -330,6 +370,20 @@ export class BridgeServer {
 				}
 				if (existingSessionId) {
 					c.header("mcp-session-id", existingSessionId);
+
+					if (
+						request.method === "tools/call" &&
+						(response as Record<string, unknown>).result &&
+						!(response as Record<string, unknown>).error
+					) {
+						const params = (request.params ?? {}) as Record<string, unknown>;
+						if (params.name === "read_note") {
+							const args = (params.arguments ?? {}) as Record<string, unknown>;
+							if (typeof args.path === "string") {
+								this.mcpSessions.markNoteRead(existingSessionId, normalizeNotePath(args.path));
+							}
+						}
+					}
 				}
 				return c.json(response, 200);
 			} catch (error) {

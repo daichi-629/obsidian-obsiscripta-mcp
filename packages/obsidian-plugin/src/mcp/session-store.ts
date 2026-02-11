@@ -27,6 +27,7 @@ export class MCPSessionStore {
 			sessionId: this.generateSessionId(),
 			createdAt: now,
 			lastAccessedAt: now,
+			readNotePaths: new Set<string>(),
 		};
 		this.sessions.set(session.sessionId, session);
 		return session;
@@ -57,6 +58,23 @@ export class MCPSessionStore {
 
 	delete(sessionId: string): boolean {
 		return this.sessions.delete(sessionId);
+	}
+
+	markNoteRead(sessionId: string, notePath: string): boolean {
+		const session = this.get(sessionId);
+		if (!session) {
+			return false;
+		}
+		session.readNotePaths.add(notePath);
+		return true;
+	}
+
+	hasReadNote(sessionId: string, notePath: string): boolean {
+		const session = this.get(sessionId);
+		if (!session) {
+			return false;
+		}
+		return session.readNotePaths.has(notePath);
 	}
 
 	gc(now: number = Date.now()): void {
