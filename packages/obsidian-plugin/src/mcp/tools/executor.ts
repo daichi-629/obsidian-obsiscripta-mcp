@@ -2,6 +2,7 @@ import { ToolRegistry } from "./registry";
 import type { AppContext } from "../../plugin/context";
 import { handleHealth, handleTools, handleToolCall } from "../bridge-api";
 import type { HealthResponse, ToolListResponse, ToolCallResponse } from "../bridge-types";
+import { createSessionAwareContext } from "./session-store";
 
 /**
  * Encapsulates tool execution logic with registry and context.
@@ -36,12 +37,13 @@ export class ToolExecutor {
 	async executeToolCall(
 		toolName: string,
 		argumentsPayload: unknown,
+		sessionId: string = "bridge-v1-default",
 	): Promise<ToolCallResponse> {
 		return handleToolCall(
 			toolName,
 			argumentsPayload,
 			this.registry,
-			this.context,
+			this.getContext(sessionId),
 		);
 	}
 
@@ -62,7 +64,7 @@ export class ToolExecutor {
 	/**
 	 * Get the app context (for MCP standard HTTP handlers)
 	 */
-	getContext(): AppContext {
-		return this.context;
+	getContext(sessionId: string = "bridge-v1-default"): AppContext {
+		return createSessionAwareContext(this.context, sessionId);
 	}
 }

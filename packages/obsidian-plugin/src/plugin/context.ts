@@ -1,6 +1,14 @@
 import { App, EventRef, Vault } from "obsidian";
 import type MCPPlugin from "../main";
 
+export interface SessionContextApi {
+	get: (key: string) => unknown;
+	set: (key: string, value: unknown) => void;
+	delete: (key: string) => boolean;
+	has: (key: string) => boolean;
+	clear: () => void;
+}
+
 /**
  * Minimal application context interface.
  * Exposes only the essential Obsidian primitives needed by tool handlers.
@@ -14,6 +22,8 @@ export interface AppContext {
 	vault: Vault;
 	/** Obsidian App instance for global app state */
 	app: App;
+	/** MCP session-scoped key/value store API */
+	session: SessionContextApi;
 }
 
 /**
