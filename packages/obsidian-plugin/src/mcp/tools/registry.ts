@@ -12,10 +12,12 @@ export enum ToolSource {
 export class ToolRegistry {
 	private tools: Map<string, MCPToolDefinition> = new Map();
 	private disabledTools: Set<string>;
+	private searchExcludedTools: Set<string>;
 	private toolSources: Map<string, ToolSource> = new Map();
 
-	constructor(disabledTools?: Iterable<string>) {
+	constructor(disabledTools?: Iterable<string>, searchExcludedTools?: Iterable<string>) {
 		this.disabledTools = new Set(disabledTools);
+		this.searchExcludedTools = new Set(searchExcludedTools);
 	}
 
 	/**
@@ -82,6 +84,31 @@ export class ToolRegistry {
 	}
 
 	/**
+	 * Check if a tool is included in search.
+	 */
+	isIncludedInSearch(name: string): boolean {
+		return this.tools.has(name) && !this.searchExcludedTools.has(name);
+	}
+
+	/**
+	 * Include or exclude a tool from search.
+	 */
+	setIncludedInSearch(name: string, included: boolean): void {
+		if (included) {
+			this.searchExcludedTools.delete(name);
+		} else {
+			this.searchExcludedTools.add(name);
+		}
+	}
+
+	/**
+	 * Replace the search-excluded tools set
+	 */
+	setSearchExcludedTools(names: Iterable<string>): void {
+		this.searchExcludedTools = new Set(names);
+	}
+
+	/**
 	 * Get the source of a tool
 	 */
 	getSource(name: string): ToolSource {
@@ -100,6 +127,15 @@ export class ToolRegistry {
 	 */
 	listEnabled(): MCPToolDefinition[] {
 		return this.list().filter((tool) => this.isEnabled(tool.name));
+	}
+
+	/**
+	 * Get all tools enabled and included in search.
+	 */
+	listSearchable(): MCPToolDefinition[] {
+		return this.list().filter(
+			(tool) => this.isEnabled(tool.name) && this.isIncludedInSearch(tool.name),
+		);
 	}
 
 	/**
