@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
 import { TFile } from "obsidian";
-import diff_match_patch from "diff-match-patch";
 import { editNoteTool } from "../../mcp/tools/builtin/edit";
 import { readNoteTool } from "../../mcp/tools/builtin/notes";
 
@@ -55,8 +54,7 @@ describe("edit_note session guard", () => {
 
 	it("allows edit_note after read_note in the same session", async () => {
 		const file = createTFile("Notes/Test.md", "Test");
-		const dmp = new diff_match_patch();
-		const patch = dmp.patch_toText(dmp.patch_make("Hello", "Hello world"));
+		const patch = "@@ -1,5 +1,11 @@\n Hello\n+ world\n";
 
 		const session = createSessionContext();
 		const context = {
