@@ -6,6 +6,8 @@ export interface FileInfo {
 	contents: string;
 	/** Last modification time (Unix timestamp in milliseconds) */
 	mtime: number;
+	/** Explicit loader type for this source (owned by ScriptHost implementation) */
+	loaderType: ScriptLoaderType;
 }
 
 /**
@@ -31,12 +33,15 @@ export interface WatchHandlers {
  */
 export interface ScriptHost {
 	/**
-	 * Read a file and return its contents and modification time
+	 * Read a script and return source, loader type, and modification time
 	 */
 	readFile(path: string): Promise<FileInfo>;
 
 	/**
-	 * List all script files (.js, .ts) recursively in a directory
+	 * List all script files recursively in a directory.
+	 *
+	 * The returned paths are treated as loadable scripts by the core.
+	 * Script selection rules are owned by the ScriptHost implementation.
 	 */
 	listFiles(root: string): Promise<string[]>;
 
