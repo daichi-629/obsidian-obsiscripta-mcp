@@ -38,11 +38,7 @@ It is designed to be script-extensible, so you can add your own custom tools wit
 3. The stdio bridge forwards requests to the plugin via HTTP.
 4. Tool execution is handled by built-in tools and/or script tools.
 
-The stdio bridge supports three transport modes:
-
-- `auto` (default): prefer MCP Standard, then fall back to Bridge v1
-- `mcp`: MCP Standard only
-- `v1`: Bridge Protocol v1 only
+The stdio bridge always uses the MCP Standard HTTP endpoint (`/mcp`).
 
 ## Setup
 
@@ -146,8 +142,7 @@ See [docs/protocol.md](docs/protocol.md) for details.
 			"env": {
 				"OBSIDIAN_MCP_HOST": "127.0.0.1",
 				"OBSIDIAN_MCP_PORT": "3000",
-				"OBSIDIAN_MCP_API_KEY": "obsi_...",
-				"OBSIDIAN_MCP_TRANSPORT": "auto"
+				"OBSIDIAN_MCP_API_KEY": "obsi_..."
 			}
 		}
 	}

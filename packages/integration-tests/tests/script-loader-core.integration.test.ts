@@ -3,7 +3,6 @@ import { BridgeServer } from '../../obsidian-plugin/src/mcp/server.js';
 import { ToolExecutor } from '../../obsidian-plugin/src/mcp/tools/executor.js';
 import { ToolRegistry, ToolSource } from '../../obsidian-plugin/src/mcp/tools/registry.js';
 import { validateAndConvertScriptExports } from '../../obsidian-plugin/src/mcp/tools/scripting/script-validator.js';
-import { PluginClient } from '../../stdio-bridge/src/plugin-client.js';
 import { StdioBridgeServer } from '../../stdio-bridge/src/bridge-server.js';
 import {
   FunctionRuntime,
@@ -115,20 +114,31 @@ describe('script-loader-core + ToolExecutor + BridgeServer + stdio-bridge full i
     await bridgeServer.start();
     cleanup.push(() => bridgeServer.stop());
 
-    const pluginClient = new PluginClient({
+    const stdioBridge = new StdioBridgeServer({
+      host: '127.0.0.1',
       port,
-      transportMode: 'mcp',
       timeout: 1000,
       apiKey,
     });
-    const stdioBridge = new StdioBridgeServer(pluginClient, 50);
 
-    await stdioBridge.syncTools();
-    expect(stdioBridge.getPollingState().tools.has('dynamic/echo')).toBe(true);
+    const firstList = await stdioBridge.forwardRequest({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/list',
+      params: {},
+    }) as { result?: { tools?: unknown } };
+    expect(Array.isArray(firstList.result?.tools)).toBe(true);
 
-    const callResult = await stdioBridge.executeToolCall('dynamic/echo', { text: 'hello' });
-    expect(callResult.success).toBe(true);
-    expect(callResult.content[0]?.text).toBe('dynamic:hello');
+    const firstCall = await stdioBridge.forwardRequest({
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/call',
+      params: {
+        name: 'dynamic/echo',
+        arguments: { text: 'hello' },
+      },
+    }) as { result?: { content?: Array<{ text?: string }> } };
+    expect(firstCall.result?.content?.[0]?.text).toBe('dynamic:hello');
 
     scriptHost.updateFile(
       scriptPath,
@@ -148,9 +158,21 @@ describe('script-loader-core + ToolExecutor + BridgeServer + stdio-bridge full i
     scriptHost.triggerModify(scriptPath);
     await delay(80);
 
-    await stdioBridge.syncTools();
-    const updatedResult = await stdioBridge.executeToolCall('dynamic/echo', { text: 'hello' });
-    expect(updatedResult.success).toBe(true);
-    expect(updatedResult.content[0]?.text).toBe('dynamic-v2:hello');
+    await stdioBridge.forwardRequest({
+      jsonrpc: '2.0',
+      id: 3,
+      method: 'tools/list',
+      params: {},
+    });
+    const updatedResult = await stdioBridge.forwardRequest({
+      jsonrpc: '2.0',
+      id: 4,
+      method: 'tools/call',
+      params: {
+        name: 'dynamic/echo',
+        arguments: { text: 'hello' },
+      },
+    }) as { result?: { content?: Array<{ text?: string }> } };
+    expect(updatedResult.result?.content?.[0]?.text).toBe('dynamic-v2:hello');
   });
 });
