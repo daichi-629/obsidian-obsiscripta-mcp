@@ -1,143 +1,83 @@
 /**
- * Streamable HTTP transport handler for Hono.
- * Uses WebStandardStreamableHTTPServerTransport which works natively with
- * Hono's Web Standard Request/Response.
+ * Streamable HTTP MCP proxy handler for Hono.
+ *
+ * This endpoint only handles:
+ * - OAuth access token validation (via middleware)
+ * - Per-user plugin host/port lookup
+ * - Plugin API key header injection
+ * - Transparent body + MCP-Session-Id forwarding
  */
 
 import { Hono } from "hono";
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import type { RemoteMcpServer } from "./mcp-server.js";
 import { getAccessToken } from "../auth/middleware.js";
-
-/**
- * Active transport sessions keyed by session ID
- */
-const transports = new Map<
-	string,
-	WebStandardStreamableHTTPServerTransport
->();
-
-/**
- * Session ID to GitHub user ID mapping
- */
-const sessionUsers = new Map<string, number>();
+import type { TokenStore } from "../store/token-store.js";
 
 /**
  * Create Hono routes for the MCP Streamable HTTP endpoint.
- * Uses app.all to handle POST, GET, DELETE on /mcp as required by the spec.
  */
-export function createMcpTransportRoutes(
-	remoteMcpServer: RemoteMcpServer
-): Hono {
+export function createMcpTransportRoutes(store: TokenStore): Hono {
 	const app = new Hono();
 
 	app.all("/mcp", async (c) => {
-		const sessionId = c.req.header("mcp-session-id");
-
-		// Get user info from auth middleware
 		const accessToken = getAccessToken(c);
 		const githubUserId = accessToken?.githubUser?.id;
 
-		// For POST without session ID → new session (initialization)
-		if (c.req.method === "POST" && !sessionId) {
-			const transport = new WebStandardStreamableHTTPServerTransport({
-				sessionIdGenerator: () => crypto.randomUUID(),
-				onsessioninitialized: (newSessionId) => {
-					transports.set(newSessionId, transport);
-					if (githubUserId) {
-						sessionUsers.set(newSessionId, githubUserId);
-						console.error(
-							`[Transport] Session initialized: ${newSessionId} (user: ${githubUserId})`
-						);
-					} else {
-						console.error(
-							`[Transport] Session initialized: ${newSessionId} (no user)`
-						);
-					}
-				},
-				onsessionclosed: (closedSessionId) => {
-					transports.delete(closedSessionId);
-					sessionUsers.delete(closedSessionId);
-					console.error(
-						`[Transport] Session closed: ${closedSessionId}`
-					);
-				},
-			});
-
-			// Connect MCP server to this transport
-			await remoteMcpServer.mcpServer.connect(transport);
-
-			// Handle request within user context
-			if (githubUserId) {
-				return remoteMcpServer.runInContext(
-					{ githubUserId },
-					() => transport.handleRequest(c.req.raw)
-				);
-			}
-
-			return transport.handleRequest(c.req.raw);
+		if (!githubUserId) {
+			return c.json({ error: "unauthorized" }, 401);
 		}
 
-		// For requests with session ID → reuse existing transport
-		if (sessionId && transports.has(sessionId)) {
-			const transport = transports.get(sessionId)!;
-			const userId = sessionUsers.get(sessionId);
-
-			// Handle request within user context if available
-			if (userId) {
-				return remoteMcpServer.runInContext(
-					{ githubUserId: userId, sessionId },
-					() => transport.handleRequest(c.req.raw)
-				);
-			}
-
-			return transport.handleRequest(c.req.raw);
-		}
-
-		if (sessionId) {
+		const pluginToken = store.getPluginTokenByUserId(githubUserId);
+		if (!pluginToken) {
 			return c.json(
 				{
-					jsonrpc: "2.0",
-					error: {
-						code: -32000,
-						message: "Not Found: Session expired or not found",
-					},
-					id: null,
+					error: "plugin_not_configured",
+					message: "No plugin connection is configured for this user",
 				},
 				404
 			);
 		}
 
-		// Missing session for non-initialize requests
-		return c.json(
-			{
-				jsonrpc: "2.0",
-				error: {
-					code: -32000,
-					message: "Bad Request: MCP-Session-Id header is required",
-				},
-				id: null,
-			},
-			400
-		);
+		const protocol = pluginToken.pluginPort === 443 ? "https" : "http";
+		const pluginUrl = `${protocol}://${pluginToken.pluginHost}:${pluginToken.pluginPort}/mcp`;
+
+		const headers = new Headers();
+		const contentType = c.req.header("content-type");
+		const accept = c.req.header("accept");
+		const mcpSessionId = c.req.header("mcp-session-id");
+
+		if (contentType) {
+			headers.set("content-type", contentType);
+		}
+		if (accept) {
+			headers.set("accept", accept);
+		}
+		if (mcpSessionId) {
+			headers.set("mcp-session-id", mcpSessionId);
+		}
+
+		if (pluginToken.requireAuth) {
+			headers.set("x-obsiscripta-api-key", pluginToken.token);
+		}
+
+		const response = await fetch(pluginUrl, {
+			method: c.req.method,
+			headers,
+			body: c.req.method === "GET" || c.req.method === "HEAD" ? undefined : c.req.raw.body,
+			duplex: "half",
+		});
+
+		return new Response(response.body, {
+			status: response.status,
+			headers: response.headers,
+		});
 	});
 
 	return app;
 }
 
 /**
- * Close all active transport sessions. Call on server shutdown.
+ * No active in-memory transport sessions are maintained in proxy mode.
  */
 export async function closeAllTransports(): Promise<void> {
-	for (const [sessionId, transport] of transports) {
-		try {
-			await transport.close();
-		} catch (error) {
-			console.error(
-				`[Transport] Error closing session ${sessionId}:`,
-				error
-			);
-		}
-	}
-	transports.clear();
+	return;
 }
