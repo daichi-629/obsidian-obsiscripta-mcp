@@ -34,17 +34,8 @@ export interface PluginClientConfig {
 	host: string;
 	port: number;
 	timeout: number;
-	transportMode: TransportMode;
 	apiKey: string;
 }
-
-/**
- * Transport mode for plugin communication
- * - auto: MCP Standard HTTP first, fallback to Bridge v1
- * - mcp: MCP Standard HTTP only
- * - v1: Bridge v1 only
- */
-export type TransportMode = "auto" | "mcp" | "v1";
 
 /**
  * JSON Schema for tool input validation (simplified for stdio-bridge)

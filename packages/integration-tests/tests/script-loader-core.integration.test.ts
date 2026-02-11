@@ -117,7 +117,6 @@ describe('script-loader-core + ToolExecutor + BridgeServer + stdio-bridge full i
 
     const pluginClient = new PluginClient({
       port,
-      transportMode: 'mcp',
       timeout: 1000,
       apiKey,
     });

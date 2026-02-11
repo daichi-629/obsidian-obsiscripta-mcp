@@ -17,7 +17,6 @@ import type {
 	ToolListResponse,
 	ToolCallResponse,
 	ErrorResponse,
-	TransportMode,
 	MCPContent,
 } from "./types.js";
 
@@ -57,7 +56,6 @@ const DEFAULT_CONFIG = {
 	host: "127.0.0.1",
 	port: 3000,
 	timeout: 5000, // 5 seconds
-	transportMode: "auto" as const,
 	apiKey: "",
 } as const;
 
@@ -74,13 +72,9 @@ const RETRY_CONFIG = {
  * HTTP client for communicating with the Obsidian plugin's Bridge API
  */
 export class PluginClient {
-	private readonly v1BaseUrl: string;
 	private readonly mcpBaseUrl: string;
 	private readonly timeout: number;
-	private readonly transportMode: TransportMode;
 	private readonly apiKey: string;
-	private preferredTransport: "mcp" | "v1";
-	private fallbackCount = 0;
 	private requestId = 1;
 	private mcpSessionId: string | null = null;
 
@@ -89,19 +83,11 @@ export class PluginClient {
 			host: config?.host ?? DEFAULT_CONFIG.host,
 			port: config?.port ?? DEFAULT_CONFIG.port,
 			timeout: config?.timeout ?? DEFAULT_CONFIG.timeout,
-			transportMode: config?.transportMode ?? DEFAULT_CONFIG.transportMode,
 			apiKey: config?.apiKey ?? DEFAULT_CONFIG.apiKey,
 		};
-		this.v1BaseUrl = `http://${mergedConfig.host}:${mergedConfig.port}/bridge/v1`;
 		this.mcpBaseUrl = `http://${mergedConfig.host}:${mergedConfig.port}/mcp`;
 		this.timeout = mergedConfig.timeout;
-		this.transportMode = mergedConfig.transportMode;
 		this.apiKey = mergedConfig.apiKey;
-		this.preferredTransport = mergedConfig.transportMode === "v1" ? "v1" : "mcp";
-
-		console.error(
-			`[PluginClient] Transport mode: ${this.transportMode} (preferred: ${this.preferredTransport})`
-		);
 	}
 
 	/**
@@ -109,11 +95,7 @@ export class PluginClient {
 	 * @returns Health response with status, version, and protocol version
 	 */
 	async health(): Promise<HealthResponse> {
-		return this.executeWithTransportFallback(
-			"health",
-			() => this.mcpHealth(),
-			() => this.v1Health()
-		);
+		return this.mcpHealth();
 	}
 
 	/**
@@ -121,11 +103,7 @@ export class PluginClient {
 	 * @returns Tool list response with tools array and hash
 	 */
 	async listTools(): Promise<ToolListResponse> {
-		return this.executeWithTransportFallback(
-			"listTools",
-			() => this.mcpListTools(),
-			() => this.v1ListTools()
-		);
+		return this.mcpListTools();
 	}
 
 	/**
@@ -139,11 +117,7 @@ export class PluginClient {
 		toolName: string,
 		args: Record<string, unknown> = {}
 	): Promise<ToolCallResponse> {
-		return this.executeWithTransportFallback(
-			"callTool",
-			() => this.mcpCallTool(toolName, args),
-			() => this.v1CallTool(toolName, args)
-		);
+		return this.mcpCallTool(toolName, args);
 	}
 
 	/**
@@ -173,43 +147,6 @@ export class PluginClient {
 		return this.withRetry(() => this.health(), maxRetries, initialDelayMs);
 	}
 
-	private async executeWithTransportFallback<T>(
-		operation: string,
-		mcpOperation: () => Promise<T>,
-		v1Operation: () => Promise<T>
-	): Promise<T> {
-		if (!this.shouldUseMcpFirst()) {
-			return v1Operation();
-		}
-
-		try {
-			return await mcpOperation();
-		} catch (error) {
-			if (!this.canFallbackToV1() || !this.shouldFallbackToV1(operation, error)) {
-				throw error;
-			}
-			this.logFallback(operation, error);
-			return v1Operation();
-		}
-	}
-
-	private shouldFallbackToV1(operation: string, error: unknown): boolean {
-		if (operation !== "callTool") {
-			return true;
-		}
-
-		if (!(error instanceof PluginClientError)) {
-			return false;
-		}
-
-		const mcpError = error.details as { mcpError?: { code?: number } } | undefined;
-		if (mcpError?.mcpError?.code === -32601) {
-			return true;
-		}
-
-		return error.statusCode === 404 || error.statusCode === 405 || error.statusCode === 501;
-	}
-
 	private async mcpHealth(): Promise<HealthResponse> {
 		await this.mcpToolsList();
 		return {
@@ -219,10 +156,6 @@ export class PluginClient {
 		};
 	}
 
-	private async v1Health(): Promise<HealthResponse> {
-		return this.v1Request<HealthResponse>("GET", "/health");
-	}
-
 	private async mcpListTools(): Promise<ToolListResponse> {
 		const result = await this.mcpToolsList();
 		const tools = this.convertMcpTools(result.tools);
@@ -230,10 +163,6 @@ export class PluginClient {
 			tools,
 			hash: this.hashTools(tools),
 		};
-	}
-
-	private async v1ListTools(): Promise<ToolListResponse> {
-		return this.v1Request<ToolListResponse>("GET", "/tools");
 	}
 
 	private async mcpCallTool(
@@ -253,17 +182,6 @@ export class PluginClient {
 			success: true,
 			content,
 		};
-	}
-
-	private async v1CallTool(
-		toolName: string,
-		args: Record<string, unknown>
-	): Promise<ToolCallResponse> {
-		return this.v1Request<ToolCallResponse>(
-			"POST",
-			`/tools/${encodeURIComponent(toolName)}/call`,
-			{ arguments: args }
-		);
 	}
 
 	private convertMcpTools(tools: ListToolsResult["tools"]): Tool[] {
@@ -321,29 +239,6 @@ export class PluginClient {
 			`Failed after ${maxRetries} attempts: ${lastError.message}`,
 			maxRetries,
 			lastError
-		);
-	}
-
-	private shouldUseMcpFirst(): boolean {
-		if (this.transportMode === "v1") {
-			return false;
-		}
-		if (this.transportMode === "mcp") {
-			return true;
-		}
-		return this.preferredTransport === "mcp";
-	}
-
-	private canFallbackToV1(): boolean {
-		return this.transportMode === "auto";
-	}
-
-	private logFallback(operation: string, error: unknown): void {
-		this.fallbackCount += 1;
-		this.preferredTransport = "v1";
-		const reason = error instanceof Error ? error.message : String(error);
-		console.error(
-			`[PluginClient] MCP fallback triggered (${operation}) -> Bridge v1; reason="${reason}"; fallbackCount=${this.fallbackCount}`
 		);
 	}
 
@@ -489,18 +384,9 @@ export class PluginClient {
 		);
 	}
 
-	private async v1Request<T>(
-		method: "GET" | "POST",
-		path: string,
-		body?: unknown
-	): Promise<T> {
-		const { response } = await this.fetchJson<T>(`${this.v1BaseUrl}${path}`, method, body, "");
-		return response;
-	}
-
 	private async fetchJson<T>(
 		url: string,
-		method: "GET" | "POST",
+		method: "POST",
 		body?: unknown,
 		apiKey: string = "",
 		extraHeaders: Record<string, string> = {}
