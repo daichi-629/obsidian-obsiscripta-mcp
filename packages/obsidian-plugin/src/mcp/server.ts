@@ -15,14 +15,23 @@ import { MCPSessionStore } from "./session-store";
 
 function normalizeNotePath(path: string): string {
 	const normalizedSegments = path
-		.replaceAll("\\", "/")
+		.replace(/\\/g, "/")
 		.split("/")
-		.filter((segment) => segment.length > 0 && segment !== ".");
+		.filter((segment: string) => segment.length > 0 && segment !== ".");
 	let normalizedPath = normalizedSegments.join("/");
 	if (!normalizedPath.toLowerCase().endsWith(".md")) {
 		normalizedPath = `${normalizedPath}.md`;
 	}
 	return normalizedPath;
+}
+
+function isSuccessfulJSONRPCResult(response: unknown): response is { result: unknown } {
+	return (
+		typeof response === "object" &&
+		response !== null &&
+		"result" in response &&
+		!("error" in response)
+	);
 }
 
 export class BridgeServer {
@@ -373,8 +382,7 @@ export class BridgeServer {
 
 					if (
 						request.method === "tools/call" &&
-						(response as Record<string, unknown>).result &&
-						!(response as Record<string, unknown>).error
+						isSuccessfulJSONRPCResult(response)
 					) {
 						const params = (request.params ?? {}) as Record<string, unknown>;
 						if (params.name === "read_note") {
