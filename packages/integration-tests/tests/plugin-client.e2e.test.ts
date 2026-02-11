@@ -68,7 +68,12 @@ describe('StdioBridgeServer MCP HTTP proxy', () => {
       apiKey: 'obsi_test_key',
     });
 
-    await bridge.listTools();
+    await bridge.forwardRequest({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/list',
+      params: {},
+    });
 
     expect(apiKeyHeaders).toEqual(['obsi_test_key', 'obsi_test_key']);
     expect(sessionHeaders).toEqual([undefined, 'session-1']);
@@ -120,7 +125,12 @@ describe('StdioBridgeServer MCP HTTP proxy', () => {
       apiKey: 'obsi_test_key',
     });
 
-    await bridge.listTools();
+    await bridge.forwardRequest({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/list',
+      params: {},
+    });
 
     expect(sessionIds).toEqual(['session-1', 'session-2']);
     expect(listCalls).toBe(2);

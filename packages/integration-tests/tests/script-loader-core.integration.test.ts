@@ -121,11 +121,24 @@ describe('script-loader-core + ToolExecutor + BridgeServer + stdio-bridge full i
       apiKey,
     });
 
-    const firstList = await stdioBridge.listTools();
-    expect(Array.isArray((firstList as { tools?: unknown }).tools)).toBe(true);
+    const firstList = await stdioBridge.forwardRequest({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/list',
+      params: {},
+    }) as { result?: { tools?: unknown } };
+    expect(Array.isArray(firstList.result?.tools)).toBe(true);
 
-    const firstCall = await stdioBridge.callTool('dynamic/echo', { text: 'hello' }) as { content?: Array<{ text?: string }> };
-    expect(firstCall.content?.[0]?.text).toBe('dynamic:hello');
+    const firstCall = await stdioBridge.forwardRequest({
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/call',
+      params: {
+        name: 'dynamic/echo',
+        arguments: { text: 'hello' },
+      },
+    }) as { result?: { content?: Array<{ text?: string }> } };
+    expect(firstCall.result?.content?.[0]?.text).toBe('dynamic:hello');
 
     scriptHost.updateFile(
       scriptPath,
@@ -145,8 +158,21 @@ describe('script-loader-core + ToolExecutor + BridgeServer + stdio-bridge full i
     scriptHost.triggerModify(scriptPath);
     await delay(80);
 
-    await stdioBridge.listTools();
-    const updatedResult = await stdioBridge.callTool('dynamic/echo', { text: 'hello' }) as { content?: Array<{ text?: string }> };
-    expect(updatedResult.content?.[0]?.text).toBe('dynamic-v2:hello');
+    await stdioBridge.forwardRequest({
+      jsonrpc: '2.0',
+      id: 3,
+      method: 'tools/list',
+      params: {},
+    });
+    const updatedResult = await stdioBridge.forwardRequest({
+      jsonrpc: '2.0',
+      id: 4,
+      method: 'tools/call',
+      params: {
+        name: 'dynamic/echo',
+        arguments: { text: 'hello' },
+      },
+    }) as { result?: { content?: Array<{ text?: string }> } };
+    expect(updatedResult.result?.content?.[0]?.text).toBe('dynamic-v2:hello');
   });
 });

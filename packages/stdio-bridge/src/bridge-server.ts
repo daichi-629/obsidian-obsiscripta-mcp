@@ -75,17 +75,11 @@ export class StdioBridgeServer {
 		return this.isRunning;
 	}
 
-	async listTools(): Promise<unknown> {
-		await this.ensureSession();
-		return this.sendRequest("tools/list", {});
-	}
-
-	async callTool(toolName: string, args: Record<string, unknown>): Promise<unknown> {
-		await this.ensureSession();
-		return this.sendRequest("tools/call", {
-			name: toolName,
-			arguments: args,
-		});
+	async forwardRequest(request: JSONRPCRequest): Promise<JSONRPCResponse | undefined> {
+		if (request.method !== "initialize") {
+			await this.ensureSession();
+		}
+		return this.forwardJsonRpcMessage(request);
 	}
 
 	private async ensureSession(): Promise<void> {
@@ -124,23 +118,6 @@ export class StdioBridgeServer {
 		if (response && this.transport) {
 			await this.transport.send(response);
 		}
-	}
-
-	private async sendRequest(method: string, params: Record<string, unknown>): Promise<unknown> {
-		const request: JSONRPCRequest = {
-			jsonrpc: "2.0",
-			id: this.requestId++,
-			method,
-			params,
-		};
-		const response = await this.forwardJsonRpcMessage(request);
-		if (!response || !("id" in response)) {
-			throw new Error(`No JSON-RPC response for ${method}`);
-		}
-		if ("error" in response) {
-			throw new Error(`MCP error ${response.error.code}: ${response.error.message}`);
-		}
-		return response.result;
 	}
 
 	private async forwardJsonRpcMessage(
