@@ -5,10 +5,9 @@
  * Claude Desktop → (Streamable HTTP MCP) → This Server → HTTP(S) → Obsidian Plugin
  *
  * This server:
- * 1. Exposes MCP tools via Streamable HTTP transport
- * 2. Authenticates Claude Desktop via OAuth 2.1 (GitHub login)
- * 3. Proxies tool calls to the Obsidian plugin's Bridge API
- * 4. Provides an admin API for managing plugin connection tokens
+ * 1. Authenticates Claude Desktop via OAuth 2.1 (GitHub login)
+ * 2. Transparently proxies Streamable HTTP MCP traffic to the Obsidian plugin
+ * 3. Provides an admin API for managing plugin connection tokens
  */
 
 import { Hono } from "hono";
