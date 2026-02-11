@@ -3,9 +3,8 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
 import { TokenStore } from '../../remote-mcp-server/src/store/token-store.js';
-import { RemoteMcpServer } from '../../remote-mcp-server/src/mcp/mcp-server.js';
 import { createMcpTransportRoutes } from '../../remote-mcp-server/src/mcp/transport-handler.js';
-import { requireAuth, requireAdminAuth } from '../../remote-mcp-server/src/auth/middleware.js';
+import { requireAuth } from '../../remote-mcp-server/src/auth/middleware.js';
 import { createAdminRoutes } from '../../remote-mcp-server/src/admin/admin-routes.js';
 import type { AccessToken, GitHubUser, PluginToken } from '../../remote-mcp-server/src/types.js';
 import type { Server } from 'node:http';
@@ -38,6 +37,75 @@ async function getFreePort(): Promise<number> {
 /**
  * Create a test remote MCP server
  */
+
+
+async function startMockPluginServer(options: {
+  apiKey?: string;
+} = {}): Promise<{ server: Server; port: number }> {
+  const port = await getFreePort();
+  const sessions = new Set<string>();
+
+  const app = new Hono();
+  app.all('/mcp', async (c) => {
+    if (options.apiKey) {
+      const provided = c.req.header('x-obsiscripta-api-key');
+      if (provided !== options.apiKey) {
+        return c.json({ error: 'Unauthorized', message: 'Invalid or missing MCP API key' }, 401);
+      }
+    }
+
+    const sessionId = c.req.header('mcp-session-id');
+
+    if (c.req.method === 'DELETE') {
+      if (!sessionId) {
+        return c.json({ error: 'Missing MCP session' }, 400);
+      }
+      sessions.delete(sessionId);
+      return new Response(null, { status: 200 });
+    }
+
+    const payload = await c.req.json<{ id?: number | string | null; method?: string }>();
+
+    if (payload.method === 'initialize') {
+      if (sessionId) {
+        return c.json({ jsonrpc: '2.0', error: { code: -32000, message: 'Initialize requests must not include MCP-Session-Id' }, id: payload.id ?? null }, 400);
+      }
+      const newSessionId = crypto.randomUUID();
+      sessions.add(newSessionId);
+      c.header('MCP-Session-Id', newSessionId);
+      return c.json({
+        jsonrpc: '2.0',
+        id: payload.id ?? null,
+        result: {
+          protocolVersion: '2024-11-05',
+          capabilities: { tools: {} },
+          serverInfo: { name: 'mock-plugin', version: 'test' },
+        },
+      });
+    }
+
+    if (!sessionId) {
+      return c.json({ jsonrpc: '2.0', error: { code: -32000, message: 'MCP-Session-Id header is required' }, id: payload.id ?? null }, 400);
+    }
+
+    if (!sessions.has(sessionId)) {
+      return c.json({ jsonrpc: '2.0', error: { code: -32000, message: 'Session not found' }, id: payload.id ?? null }, 404);
+    }
+
+    if (payload.method === 'tools/list') {
+      return c.json({ jsonrpc: '2.0', id: payload.id ?? null, result: { tools: [] } });
+    }
+
+    return c.json({ jsonrpc: '2.0', id: payload.id ?? null, result: {} });
+  });
+
+  const server = await new Promise<Server>((resolve) => {
+    const s = serve({ fetch: app.fetch, hostname: '127.0.0.1', port }, () => resolve(s));
+  });
+
+  return { server, port };
+}
+
 async function createTestServer(): Promise<{
   server: Server;
   port: number;
@@ -46,7 +114,6 @@ async function createTestServer(): Promise<{
 }> {
   const port = await getFreePort();
   const store = new TokenStore();
-  const remoteMcpServer = new RemoteMcpServer(store);
 
   const app = new Hono();
 
@@ -73,7 +140,7 @@ async function createTestServer(): Promise<{
   const resourceMetadataUrl = `http://127.0.0.1:${port}/.well-known/oauth-protected-resource`;
   app.use('/mcp', requireAuth(store, resourceMetadataUrl));
 
-  const mcpRoutes = createMcpTransportRoutes(remoteMcpServer);
+  const mcpRoutes = createMcpTransportRoutes(store);
   app.route('/', mcpRoutes);
 
   // Admin routes (admin secret auth) - mount after MCP routes to avoid middleware conflicts
@@ -175,7 +242,24 @@ describe('Remote MCP Server Authentication E2E', () => {
     };
     store.saveAccessToken(accessToken);
 
-    // Note: Without a plugin token, we won't get tools, but auth should pass
+    const mockPlugin = await startMockPluginServer();
+    cleanup.push(() =>
+      new Promise<void>((resolve) => {
+        mockPlugin.server.close(() => resolve());
+      })
+    );
+
+    store.savePluginToken({
+      id: 'plugin-auth-test',
+      name: 'Auth Test Plugin',
+      token: 'unused',
+      pluginHost: '127.0.0.1',
+      pluginPort: mockPlugin.port,
+      githubUserId: testUser.id,
+      requireAuth: false,
+      createdAt: Date.now(),
+    });
+
     const validTokenResponse = await fetch(`${baseUrl}/mcp`, {
       method: 'POST',
       headers: {
@@ -231,6 +315,24 @@ describe('Remote MCP Server Authentication E2E', () => {
     };
     store.saveAccessToken(accessToken);
 
+    const mockPlugin = await startMockPluginServer();
+    cleanup.push(() =>
+      new Promise<void>((resolve) => {
+        mockPlugin.server.close(() => resolve());
+      })
+    );
+
+    store.savePluginToken({
+      id: 'plugin-session-test',
+      name: 'Session Test Plugin',
+      token: 'unused',
+      pluginHost: '127.0.0.1',
+      pluginPort: mockPlugin.port,
+      githubUserId: testUser.id,
+      requireAuth: false,
+      createdAt: Date.now(),
+    });
+
     // Test 1: Initialize session (POST without mcp-session-id)
     const initResponse = await fetch(`${baseUrl}/mcp`, {
       method: 'POST',
@@ -275,7 +377,7 @@ describe('Remote MCP Server Authentication E2E', () => {
     });
     expect(listToolsResponse.status).toBe(200);
 
-    // Test 3: Invalid session ID → 400
+    // Test 3: Invalid session ID → 404
     const invalidSessionResponse = await fetch(`${baseUrl}/mcp`, {
       method: 'POST',
       headers: {
@@ -291,7 +393,7 @@ describe('Remote MCP Server Authentication E2E', () => {
         params: {},
       }),
     });
-    expect(invalidSessionResponse.status).toBe(400);
+    expect(invalidSessionResponse.status).toBe(404);
   });
 
   it('supports per-user plugin configuration', async () => {
@@ -334,13 +436,18 @@ describe('Remote MCP Server Authentication E2E', () => {
     store.saveAccessToken(accessToken1);
     store.saveAccessToken(accessToken2);
 
+    const user1PluginServer = await startMockPluginServer();
+    const user2PluginServer = await startMockPluginServer({ apiKey: 'plugin2-token' });
+    cleanup.push(() => new Promise<void>((resolve) => user1PluginServer.server.close(() => resolve())));
+    cleanup.push(() => new Promise<void>((resolve) => user2PluginServer.server.close(() => resolve())));
+
     // Register plugin tokens for each user
     const pluginToken1: PluginToken = {
       id: 'plugin1',
       name: 'User 1 Plugin',
       token: 'plugin1-token',
-      pluginHost: 'localhost',
-      pluginPort: 8001,
+      pluginHost: '127.0.0.1',
+      pluginPort: user1PluginServer.port,
       githubUserId: user1.id,
       requireAuth: false,
       createdAt: Date.now(),
@@ -349,8 +456,8 @@ describe('Remote MCP Server Authentication E2E', () => {
       id: 'plugin2',
       name: 'User 2 Plugin',
       token: 'plugin2-token',
-      pluginHost: 'localhost',
-      pluginPort: 8002,
+      pluginHost: '127.0.0.1',
+      pluginPort: user2PluginServer.port,
       githubUserId: user2.id,
       requireAuth: true,
       createdAt: Date.now(),
@@ -362,17 +469,15 @@ describe('Remote MCP Server Authentication E2E', () => {
     // Verify each user gets their own plugin configuration
     const userPlugin1 = store.getPluginTokenByUserId(user1.id);
     expect(userPlugin1).toBeDefined();
-    expect(userPlugin1?.pluginPort).toBe(8001);
+    expect(userPlugin1?.pluginPort).toBe(user1PluginServer.port);
     expect(userPlugin1?.requireAuth).toBe(false);
 
     const userPlugin2 = store.getPluginTokenByUserId(user2.id);
     expect(userPlugin2).toBeDefined();
-    expect(userPlugin2?.pluginPort).toBe(8002);
+    expect(userPlugin2?.pluginPort).toBe(user2PluginServer.port);
     expect(userPlugin2?.requireAuth).toBe(true);
 
     // Test that MCP requests use the correct user context
-    // (Note: Without a real plugin server, we can't test the full flow,
-    // but we can verify authentication passes)
     const user1Response = await fetch(`${baseUrl}/mcp`, {
       method: 'POST',
       headers: {
@@ -507,6 +612,24 @@ describe('Remote MCP Server Authentication E2E', () => {
       expiresAt: Date.now() + 3600000,
     };
     store.saveAccessToken(validToken);
+
+    const mockPlugin = await startMockPluginServer();
+    cleanup.push(() =>
+      new Promise<void>((resolve) => {
+        mockPlugin.server.close(() => resolve());
+      })
+    );
+
+    store.savePluginToken({
+      id: 'plugin-expiration-test',
+      name: 'Expiration Test Plugin',
+      token: 'unused',
+      pluginHost: '127.0.0.1',
+      pluginPort: mockPlugin.port,
+      githubUserId: testUser.id,
+      requireAuth: false,
+      createdAt: Date.now(),
+    });
 
     // Use valid token → 200
     const validTokenResponse = await fetch(`${baseUrl}/mcp`, {

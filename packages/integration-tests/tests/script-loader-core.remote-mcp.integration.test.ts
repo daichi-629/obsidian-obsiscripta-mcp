@@ -8,7 +8,6 @@ import { ToolExecutor } from '../../obsidian-plugin/src/mcp/tools/executor.js';
 import { ToolRegistry, ToolSource } from '../../obsidian-plugin/src/mcp/tools/registry.js';
 import { validateAndConvertScriptExports } from '../../obsidian-plugin/src/mcp/tools/scripting/script-validator.js';
 import { createMcpTransportRoutes, closeAllTransports } from '../../remote-mcp-server/src/mcp/transport-handler.js';
-import { RemoteMcpServer } from '../../remote-mcp-server/src/mcp/mcp-server.js';
 import { requireAuth } from '../../remote-mcp-server/src/auth/middleware.js';
 import { TokenStore } from '../../remote-mcp-server/src/store/token-store.js';
 import type { AccessToken, GitHubUser } from '../../remote-mcp-server/src/types.js';
@@ -50,7 +49,6 @@ async function getFreePort(): Promise<number> {
 
 async function startRemoteMcpServer(tokenStore: TokenStore): Promise<{ server: Server; baseUrl: string }> {
   const port = await getFreePort();
-  const remoteMcpServer = new RemoteMcpServer(tokenStore);
   const app = new Hono();
 
   app.use(
@@ -65,7 +63,7 @@ async function startRemoteMcpServer(tokenStore: TokenStore): Promise<{ server: S
 
   const metadataUrl = `http://127.0.0.1:${port}/.well-known/oauth-protected-resource`;
   app.use('/mcp', requireAuth(tokenStore, metadataUrl));
-  app.route('/', createMcpTransportRoutes(remoteMcpServer));
+  app.route('/', createMcpTransportRoutes(tokenStore));
 
   const server = await new Promise<Server>((resolve) => {
     const s = serve(
@@ -223,7 +221,7 @@ describe('script-loader-core + plugin + remote-mcp end-to-end integration', () =
       pluginHost: '127.0.0.1',
       pluginPort,
       githubUserId: githubUser.id,
-      requireAuth: false,
+      requireAuth: true,
       createdAt: Date.now(),
     });
 
