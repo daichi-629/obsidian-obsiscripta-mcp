@@ -19,6 +19,24 @@ export interface HeadingInfo {
 }
 
 /**
+ * Heading information with source position details.
+ */
+export interface HeadingPosition extends HeadingInfo {
+	/**
+	 * Zero-based line index where the heading starts.
+	 */
+	lineIndex: number;
+	/**
+	 * One-based line number where the heading starts.
+	 */
+	lineNumber: number;
+	/**
+	 * Zero-based character offset where the heading starts.
+	 */
+	offset: number;
+}
+
+/**
  * Heading tree node for hierarchical structure
  */
 export interface HeadingNode {
@@ -103,6 +121,97 @@ export function extractHeadings(markdown: string): HeadingInfo[] {
 	}
 
 	extractFromTokens(tokens);
+	return headings;
+}
+
+/**
+ * Extract all headings and their source positions.
+ *
+ * - Positions are derived from the raw heading text as emitted by the markdown lexer.
+ * - If a heading token does not include raw text or the raw text cannot be found,
+ *   that heading is skipped.
+ */
+export function extractHeadingsWithPositions(markdown: string): HeadingPosition[] {
+	const tokens = parseMarkdown(markdown);
+	const headingTokens: Tokens.Heading[] = [];
+
+	function collectTokens(tokens: Token[]): void {
+		for (const token of tokens) {
+			if (token.type === 'heading') {
+				headingTokens.push(token as Tokens.Heading);
+			}
+			if ('tokens' in token && Array.isArray(token.tokens)) {
+				collectTokens(token.tokens);
+			}
+		}
+	}
+
+	collectTokens(tokens);
+
+	if (headingTokens.length === 0) {
+		return [];
+	}
+
+	const lineOffsets: number[] = [0];
+	for (let i = 0; i < markdown.length; i += 1) {
+		if (markdown[i] === "\n") {
+			lineOffsets.push(i + 1);
+		}
+	}
+
+	const findLineIndex = (offset: number): number => {
+		let low = 0;
+		let high = lineOffsets.length - 1;
+		let result = 0;
+
+		while (low <= high) {
+			const mid = Math.floor((low + high) / 2);
+			const start = lineOffsets[mid]!;
+			const nextStart = mid + 1 < lineOffsets.length ? lineOffsets[mid + 1]! : Number.POSITIVE_INFINITY;
+
+			if (offset >= start && offset < nextStart) {
+				result = mid;
+				break;
+			}
+
+			if (offset < start) {
+				high = mid - 1;
+			} else {
+				low = mid + 1;
+			}
+		}
+
+		return result;
+	};
+
+	const headings: HeadingPosition[] = [];
+	let searchIndex = 0;
+
+	for (const headingToken of headingTokens) {
+		const raw = headingToken.raw ?? "";
+		if (!raw) {
+			continue;
+		}
+
+		const matchIndex = markdown.indexOf(raw, searchIndex);
+		if (matchIndex === -1) {
+			continue;
+		}
+
+		const lineIndex = findLineIndex(matchIndex);
+		headings.push({
+			level: headingToken.depth,
+			text: headingToken.text,
+			depth: headingToken.depth,
+			raw,
+			lineIndex,
+			lineNumber: lineIndex + 1,
+			offset: matchIndex
+		});
+
+		searchIndex = matchIndex + raw.length;
+	}
+
 	return headings;
 }
 
