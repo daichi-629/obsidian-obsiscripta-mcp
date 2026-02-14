@@ -1,5 +1,6 @@
 import { normalizePath, TFile } from "obsidian";
 import { MCPToolDefinition, MCPToolResult } from "../types";
+import { extractHeadingsFromCodeBlocks, extractHeadingsWithPositions, getFrontmatterLineRange } from "../helpers/markdown-helper";
 
 interface OutlineItem {
 	heading: string;
@@ -19,71 +20,50 @@ function hashOutlineId(value: string): string {
 	return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
-function getFrontmatterLineRange(markdown: string): { start: number; end: number } | null {
-	const normalized = markdown.startsWith("\uFEFF") ? markdown.slice(1) : markdown;
-	const frontmatterMatch = normalized.match(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/);
-
-	if (!frontmatterMatch) {
-		return null;
-	}
-
-	const frontmatterText = frontmatterMatch[0];
-	const frontmatterLineCount = frontmatterText.split(/\r?\n/).length - 1;
-
-	return {
-		start: 1,
-		end: Math.max(frontmatterLineCount, 1)
-	};
-}
-
 function buildOutline(markdown: string, options: {
 	maxDepth?: number;
 	includeFrontmatter: boolean;
 	includeCodeblocks: boolean;
 }): OutlineItem[] {
-	const lines = markdown.startsWith("\uFEFF") ? markdown.slice(1).split(/\r?\n/) : markdown.split(/\r?\n/);
-	const frontmatterRange = options.includeFrontmatter ? null : getFrontmatterLineRange(markdown);
-	const headingRegex = /^\s{0,3}(#{1,6})[ \t]+(.+?)\s*#*\s*$/;
-	const headings: Array<{ heading: string; level: number; startLine: number }> = [];
-	let inCodeFence = false;
-
-	for (let index = 0; index < lines.length; index += 1) {
-		const lineNumber = index + 1;
-		const line = lines[index] ?? "";
-
-		if (/^\s*```/.test(line)) {
-			inCodeFence = !inCodeFence;
-		}
-
-		if (!options.includeCodeblocks && inCodeFence) {
-			continue;
-		}
-
-		if (frontmatterRange && lineNumber >= frontmatterRange.start && lineNumber <= frontmatterRange.end) {
-			continue;
-		}
-
-		const headingMatch = line.match(headingRegex);
-		if (!headingMatch) {
-			continue;
-		}
-
-		const level = headingMatch[1]?.length ?? 0;
-		if (options.maxDepth !== undefined && level > options.maxDepth) {
-			continue;
-		}
-
-		headings.push({
-			heading: headingMatch[2]?.trim() ?? "",
-			level,
-			startLine: lineNumber
-		});
-	}
-
+	const normalized = markdown.startsWith("\uFEFF") ? markdown.slice(1) : markdown;
+	const lines = normalized.split(/\r?\n/);
+	const frontmatterRange = options.includeFrontmatter ? null : getFrontmatterLineRange(normalized);
 	const totalLines = lines.length;
 
-	return headings.map((current, currentIndex) => {
-		const nextSameLevel = headings.slice(currentIndex + 1).find((candidate) => candidate.level === current.level);
+	const baseHeadings = extractHeadingsWithPositions(normalized).map((heading) => ({
+		heading: heading.text,
+		level: heading.level,
+		startLine: heading.lineNumber,
+		lineIndex: heading.lineIndex
+	}));
+
+	const codeHeadings = options.includeCodeblocks
+		? extractHeadingsFromCodeBlocks(normalized).map((heading) => ({
+			heading: heading.text,
+			level: heading.level,
+			startLine: heading.lineNumber,
+			lineIndex: heading.lineIndex
+		}))
+		: [];
+	const allHeadings = [...baseHeadings, ...codeHeadings]
+		.filter((heading) => {
+			if (frontmatterRange && heading.startLine >= frontmatterRange.start && heading.startLine <= frontmatterRange.end) {
+				return false;
+			}
+			if (options.maxDepth !== undefined && heading.level > options.maxDepth) {
+				return false;
+			}
+			return true;
+		})
+		.sort((a, b) => {
+			if (a.lineIndex !== b.lineIndex) {
+				return a.lineIndex - b.lineIndex;
+			}
+			return a.level - b.level;
+		});
+
+	return allHeadings.map((current, currentIndex) => {
+		const nextSameLevel = allHeadings.slice(currentIndex + 1).find((candidate) => candidate.level === current.level);
 		const endLine = nextSameLevel ? nextSameLevel.startLine - 1 : totalLines;
 		const idSource = `${current.startLine}:${current.heading}`;
 

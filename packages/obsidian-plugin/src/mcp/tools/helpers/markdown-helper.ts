@@ -72,6 +72,65 @@ export function splitFrontmatter(markdown: string): MarkdownSections {
 }
 
 /**
+ * Returns the line range covered by frontmatter (1-based, inclusive).
+ */
+export function getFrontmatterLineRange(markdown: string): { start: number; end: number } | null {
+	const { frontmatter } = splitFrontmatter(markdown);
+
+	if (!frontmatter) {
+		return null;
+	}
+
+	const frontmatterLineCount = frontmatter.split(/\r?\n/).length - 1;
+
+	return {
+		start: 1,
+		end: Math.max(frontmatterLineCount, 1)
+	};
+}
+
+/**
+ * Build zero-based line start offsets for a markdown string.
+ */
+export function buildLineOffsets(markdown: string): number[] {
+	const offsets: number[] = [0];
+	for (let i = 0; i < markdown.length; i += 1) {
+		if (markdown[i] === "\n") {
+			offsets.push(i + 1);
+		}
+	}
+	return offsets;
+}
+
+/**
+ * Convert a character offset to a zero-based line index using precomputed offsets.
+ */
+export function findLineIndex(offsets: number[], offset: number): number {
+	let low = 0;
+	let high = offsets.length - 1;
+	let result = 0;
+
+	while (low <= high) {
+		const mid = Math.floor((low + high) / 2);
+		const start = offsets[mid]!;
+		const nextStart = mid + 1 < offsets.length ? offsets[mid + 1]! : Number.POSITIVE_INFINITY;
+
+		if (offset >= start && offset < nextStart) {
+			result = mid;
+			break;
+		}
+
+		if (offset < start) {
+			high = mid - 1;
+		} else {
+			low = mid + 1;
+		}
+	}
+
+	return result;
+}
+
+/**
  * Merges frontmatter and body content back into a single markdown string
  */
 export function mergeFrontmatter(frontmatter: string, body: string): string {
@@ -152,37 +211,7 @@ export function extractHeadingsWithPositions(markdown: string): HeadingPosition[
 		return [];
 	}
 
-	const lineOffsets: number[] = [0];
-	for (let i = 0; i < markdown.length; i += 1) {
-		if (markdown[i] === "\n") {
-			lineOffsets.push(i + 1);
-		}
-	}
-
-	const findLineIndex = (offset: number): number => {
-		let low = 0;
-		let high = lineOffsets.length - 1;
-		let result = 0;
-
-		while (low <= high) {
-			const mid = Math.floor((low + high) / 2);
-			const start = lineOffsets[mid]!;
-			const nextStart = mid + 1 < lineOffsets.length ? lineOffsets[mid + 1]! : Number.POSITIVE_INFINITY;
-
-			if (offset >= start && offset < nextStart) {
-				result = mid;
-				break;
-			}
-
-			if (offset < start) {
-				high = mid - 1;
-			} else {
-				low = mid + 1;
-			}
-		}
-
-		return result;
-	};
+	const lineOffsets = buildLineOffsets(markdown);
 
 	const headings: HeadingPosition[] = [];
 	let searchIndex = 0;
@@ -198,7 +227,7 @@ export function extractHeadingsWithPositions(markdown: string): HeadingPosition[
 			continue;
 		}
 
-		const lineIndex = findLineIndex(matchIndex);
+		const lineIndex = findLineIndex(lineOffsets, matchIndex);
 		headings.push({
 			level: headingToken.depth,
 			text: headingToken.text,
@@ -210,6 +239,88 @@ export function extractHeadingsWithPositions(markdown: string): HeadingPosition[
 		});
 
 		searchIndex = matchIndex + raw.length;
+	}
+
+	return headings;
+}
+
+/**
+ * Extract ATX-style headings that appear inside fenced code blocks.
+ */
+export function extractHeadingsFromCodeBlocks(markdown: string): HeadingPosition[] {
+	const codeTokens = getTokensByType(markdown, "code");
+	if (codeTokens.length === 0) {
+		return [];
+	}
+
+	const lineOffsets = buildLineOffsets(markdown);
+	const headingRegex = /^\s{0,3}(#{1,6})[ \t]+(.+?)\s*#*\s*$/;
+	const headings: HeadingPosition[] = [];
+	let searchIndex = 0;
+
+	for (const token of codeTokens) {
+		const raw = (token as { raw?: string }).raw ?? "";
+		if (!raw) {
+			continue;
+		}
+
+		const matchIndex = markdown.indexOf(raw, searchIndex);
+		if (matchIndex === -1) {
+			continue;
+		}
+		searchIndex = matchIndex + raw.length;
+
+		const fenceMatch = raw.match(/^ {0,3}([`~]{3,})[^\n]*\r?\n([\s\S]*?)\r?\n {0,3}\1[^\n]*\r?\n?$/);
+		if (!fenceMatch) {
+			continue;
+		}
+
+		const firstNewlineIndex = raw.search(/\r?\n/);
+		if (firstNewlineIndex === -1) {
+			continue;
+		}
+
+		const openingEndIndex = firstNewlineIndex + (raw[firstNewlineIndex] === "\r" ? 2 : 1);
+		const contentRaw = fenceMatch[2] ?? "";
+		const contentStartInRaw = raw.indexOf(contentRaw, openingEndIndex);
+		if (contentStartInRaw === -1) {
+			continue;
+		}
+
+		let cursor = 0;
+		let offsetWithinContent = 0;
+
+		while (cursor <= contentRaw.length) {
+			const nextBreak = contentRaw.indexOf("\n", cursor);
+			const lineEnd = nextBreak === -1 ? contentRaw.length : (nextBreak > 0 && contentRaw[nextBreak - 1] === "\r" ? nextBreak - 1 : nextBreak);
+			const newlineLength = nextBreak === -1 ? 0 : (nextBreak > 0 && contentRaw[nextBreak - 1] === "\r" ? 2 : 1);
+			const line = contentRaw.slice(cursor, lineEnd);
+
+			const headingMatch = line.match(headingRegex);
+			if (headingMatch) {
+				const level = headingMatch[1]?.length ?? 0;
+				const headingText = headingMatch[2]?.trim() ?? "";
+				const absoluteOffset = matchIndex + contentStartInRaw + offsetWithinContent;
+				const lineIndex = findLineIndex(lineOffsets, absoluteOffset);
+
+				headings.push({
+					level,
+					text: headingText,
+					depth: level,
+					raw: line,
+					lineIndex,
+					lineNumber: lineIndex + 1,
+					offset: absoluteOffset
+				});
+			}
+
+			if (nextBreak === -1) {
+				break;
+			}
+
+			offsetWithinContent += line.length + newlineLength;
+			cursor = nextBreak + 1;
+		}
 	}
 
 	return headings;
