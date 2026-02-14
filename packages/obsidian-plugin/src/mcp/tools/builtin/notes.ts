@@ -1,6 +1,6 @@
 import { normalizePath, TFile } from "obsidian";
 import { MCPToolDefinition, MCPToolResult } from "../types";
-import { splitFrontmatter } from "../helpers/markdown-helper";
+import { extractHeadingsWithPositions, HeadingPosition, splitFrontmatter } from "../helpers/markdown-helper";
 
 interface ObsidianLinkParts {
 	linkPath: string;
@@ -9,13 +9,6 @@ interface ObsidianLinkParts {
 }
 
 type ReadSectionMode = "header" | "content" | "both";
-
-interface MarkdownHeading {
-	lineIndex: number;
-	lineNumber: number;
-	level: number;
-	text: string;
-}
 
 function parseObsidianLink(rawLink: string): ObsidianLinkParts {
 	const [targetRaw, displayRaw] = rawLink.split("|");
@@ -66,31 +59,6 @@ function resolveVaultLinks(
 	});
 }
 
-function parseMarkdownHeading(line: string, lineIndex: number): MarkdownHeading | null {
-	const match = line.match(/^(#{1,6})\s+(.+)$/);
-	if (!match) {
-		return null;
-	}
-
-	const hashPrefix = match[1];
-	const rawText = match[2];
-	if (!hashPrefix || !rawText) {
-		return null;
-	}
-
-	const text = rawText.trim().replace(/\s+#+\s*$/, "").trim();
-	if (text.length === 0) {
-		return null;
-	}
-
-	return {
-		lineIndex,
-		lineNumber: lineIndex + 1,
-		level: hashPrefix.length,
-		text,
-	};
-}
-
 function extractSectionContent(
 	body: string,
 	section: string,
@@ -100,9 +68,7 @@ function extractSectionContent(
 	maxChars: number | undefined
 ): { title: string; level: number; content: string; start_line: number; end_line: number; truncated: boolean } | { error: string } {
 	const lines = body.split("\n");
-	const headings = lines
-		.map((line, index) => parseMarkdownHeading(line, index))
-		.filter((heading): heading is MarkdownHeading => heading !== null);
+	const headings = extractHeadingsWithPositions(body);
 
 	const matchingHeadings = headings.filter((heading) => heading.text === section && (level === undefined || heading.level === level));
 	if (matchingHeadings.length === 0) {
@@ -127,28 +93,27 @@ function extractSectionContent(
 		? contentLines
 		: (() => {
 			const filteredLines: string[] = [];
-			let skippedSubsectionLevel: number | null = null;
+			const headingByLine = new Map<number, HeadingPosition>();
+			for (const heading of headings) {
+				headingByLine.set(heading.lineIndex, heading);
+			}
 
-			for (const line of contentLines) {
-				const heading = parseMarkdownHeading(line, 0);
-				if (!heading) {
-					if (skippedSubsectionLevel === null) {
-						filteredLines.push(line);
+			let skipping = false;
+			for (let lineIndex = rangeStart + 1; lineIndex <= rangeEnd; lineIndex += 1) {
+				const heading = headingByLine.get(lineIndex);
+				if (heading) {
+					if (heading.level > selected.level) {
+						skipping = true;
+						continue;
 					}
+					skipping = false;
+					filteredLines.push(lines[lineIndex] ?? "");
 					continue;
 				}
 
-				if (skippedSubsectionLevel !== null && heading.level > skippedSubsectionLevel) {
-					continue;
+				if (!skipping) {
+					filteredLines.push(lines[lineIndex] ?? "");
 				}
-
-				if (heading.level > selected.level) {
-					skippedSubsectionLevel = heading.level;
-					continue;
-				}
-
-				skippedSubsectionLevel = null;
-				filteredLines.push(line);
 			}
 
 			return filteredLines;
