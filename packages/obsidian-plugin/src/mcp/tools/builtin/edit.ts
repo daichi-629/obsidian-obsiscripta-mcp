@@ -1,7 +1,7 @@
 import { normalizePath, TFile } from "obsidian";
 import diff_match_patch from "diff-match-patch";
 import { MCPToolDefinition, MCPToolResult } from "../types";
-import { mergeFrontmatter, splitFrontmatter } from "./markdown-content";
+import { mergeFrontmatter, splitFrontmatter } from "../helpers/markdown-helper";
 
 function normalizeNotePath(path: string): string {
 	let normalizedPath = normalizePath(path);
