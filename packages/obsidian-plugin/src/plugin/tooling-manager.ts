@@ -4,6 +4,7 @@ import { MCPPluginSettings } from "../settings";
 import { MCPToolDefinition } from "../mcp/tools/types";
 import { ToolRegistry, ToolSource } from "../mcp/tools/registry";
 import { getBuiltinNoteTools } from "../mcp/tools/builtin/notes";
+import { getBuiltinNoteOutlineTools } from "../mcp/tools/builtin/note-outline";
 import { getBuiltinEditTools } from "../mcp/tools/builtin/edit";
 import {
 	ScriptLoader,
@@ -50,6 +51,9 @@ export class ToolingManager {
 
 	async start(): Promise<void> {
 		for (const tool of getBuiltinNoteTools()) {
+			this.registry.register(tool, ToolSource.Builtin);
+		}
+		for (const tool of getBuiltinNoteOutlineTools()) {
 			this.registry.register(tool, ToolSource.Builtin);
 		}
 		for (const tool of getBuiltinEditTools()) {
