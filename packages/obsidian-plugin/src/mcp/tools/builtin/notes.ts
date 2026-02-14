@@ -1,6 +1,6 @@
 import { normalizePath, TFile } from "obsidian";
 import { MCPToolDefinition, MCPToolResult } from "../types";
-import { splitFrontmatter } from "./markdown-content";
+import { splitFrontmatter } from "../helpers/markdown-helper";
 
 interface ObsidianLinkParts {
 	linkPath: string;
