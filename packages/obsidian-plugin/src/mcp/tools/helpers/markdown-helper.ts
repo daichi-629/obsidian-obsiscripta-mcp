@@ -124,7 +124,7 @@ export function extractHeadingTree(markdown: string): HeadingNode[] {
 		};
 
 		// Find the parent node in the stack
-		while (stack.length > 0 && stack[stack.length - 1].level >= heading.level) {
+		while (stack.length > 0 && stack[stack.length - 1]!.level >= heading.level) {
 			stack.pop();
 		}
 
@@ -133,7 +133,7 @@ export function extractHeadingTree(markdown: string): HeadingNode[] {
 			root.push(node);
 		} else {
 			// Add as a child to the last item in stack
-			stack[stack.length - 1].children.push(node);
+			stack[stack.length - 1]!.children.push(node);
 		}
 
 		stack.push(node);
