@@ -12,7 +12,7 @@ describe("edit_note tool", () => {
 	it("applies patch to markdown body while preserving frontmatter", async () => {
 		const noteFile = createTFile("Notes/Daily.md", "Daily");
 		const currentNote = "---\ntitle: Daily\n---\n# Entry\nToday\n";
-		const patch = "@@ -2,6 +2,8 @@\n Entry%0A\n-Today%0A\n+Today%0A\n+Tomorrow%0A\n";
+		const patch = "--- a/body.md\n+++ b/body.md\n@@ -1,2 +1,3 @@\n # Entry\n Today\n+Tomorrow\n";
 
 		const modify = vi.fn();
 		const context = {

@@ -10,6 +10,11 @@ interface ObsidianLinkParts {
 
 type ReadSectionMode = "header" | "content" | "both";
 
+interface SectionLine {
+	lineNumber: number;
+	text: string;
+}
+
 function parseObsidianLink(rawLink: string): ObsidianLinkParts {
 	const [targetRaw, displayRaw] = rawLink.split("|");
 	const target = targetRaw?.trim() ?? "";
@@ -65,7 +70,8 @@ function extractSectionContent(
 	level: number | undefined,
 	mode: ReadSectionMode,
 	includeSubsections: boolean,
-	maxChars: number | undefined
+	maxChars: number | undefined,
+	withLineNumbers: boolean
 ): { title: string; level: number; content: string; start_line: number; end_line: number; truncated: boolean } | { error: string } {
 	const lines = body.split("\n");
 	const headings = extractHeadingsWithPositions(body);
@@ -85,14 +91,21 @@ function extractSectionContent(
 	const rangeStart = selected.lineIndex;
 	const rangeEnd = Math.max(rangeStart, endLineIndex);
 
-	const segmentLines = lines.slice(rangeStart, rangeEnd + 1);
-	const headerLine = segmentLines[0] ?? "";
+	const segmentLines: SectionLine[] = [];
+	for (let lineIndex = rangeStart; lineIndex <= rangeEnd; lineIndex += 1) {
+		segmentLines.push({
+			lineNumber: lineIndex + 1,
+			text: lines[lineIndex] ?? ""
+		});
+	}
+
+	const headerLine = segmentLines[0] ?? { lineNumber: selected.lineNumber, text: "" };
 	const contentLines = segmentLines.slice(1);
 
 	const baseContentLines = includeSubsections
 		? contentLines
 		: (() => {
-			const filteredLines: string[] = [];
+			const filteredLines: SectionLine[] = [];
 			const headingByLine = new Map<number, HeadingPosition>();
 			for (const heading of headings) {
 				headingByLine.set(heading.lineIndex, heading);
@@ -107,25 +120,33 @@ function extractSectionContent(
 						continue;
 					}
 					skipping = false;
-					filteredLines.push(lines[lineIndex] ?? "");
+					filteredLines.push({
+						lineNumber: lineIndex + 1,
+						text: lines[lineIndex] ?? ""
+					});
 					continue;
 				}
 
 				if (!skipping) {
-					filteredLines.push(lines[lineIndex] ?? "");
+					filteredLines.push({
+						lineNumber: lineIndex + 1,
+						text: lines[lineIndex] ?? ""
+					});
 				}
 			}
 
 			return filteredLines;
 		})();
 
+	const formatLine = (line: SectionLine): string => (withLineNumbers ? `${line.lineNumber}: ${line.text}` : line.text);
+
 	let output = "";
 	if (mode === "header") {
-		output = headerLine;
+		output = formatLine(headerLine);
 	} else if (mode === "content") {
-		output = baseContentLines.join("\n");
+		output = baseContentLines.map(formatLine).join("\n");
 	} else {
-		output = [headerLine, ...baseContentLines].join("\n");
+		output = [headerLine, ...baseContentLines].map(formatLine).join("\n");
 	}
 
 	let truncated = false;
@@ -180,6 +201,11 @@ export const readNoteTool: MCPToolDefinition = {
 			max_chars: {
 				type: "number",
 				description: "Optional maximum number of characters in the returned content."
+			},
+			with_line_numbers: {
+				type: "boolean",
+				description: "When true, prefixes each returned line with its markdown body line number.",
+				default: false
 			}
 		},
 		required: ["path", "section"]
@@ -191,6 +217,7 @@ export const readNoteTool: MCPToolDefinition = {
 		const mode = (args.mode as ReadSectionMode | undefined) ?? "both";
 		const includeSubsections = args.include_subsections !== false;
 		const maxChars = typeof args.max_chars === "number" ? args.max_chars : undefined;
+		const withLineNumbers = args.with_line_numbers === true;
 
 		if (!section || section.trim().length === 0) {
 			return {
@@ -267,7 +294,7 @@ export const readNoteTool: MCPToolDefinition = {
 			const content = await context.vault.read(file);
 			const { body } = splitFrontmatter(content);
 			const resolvedBody = resolveVaultLinks(body, file.path, context);
-			const extracted = extractSectionContent(resolvedBody, section.trim(), level, mode, includeSubsections, maxChars);
+			const extracted = extractSectionContent(resolvedBody, section.trim(), level, mode, includeSubsections, maxChars, withLineNumbers);
 
 			if ("error" in extracted) {
 				return {

@@ -1,5 +1,5 @@
 import { normalizePath, TFile } from "obsidian";
-import diff_match_patch from "diff-match-patch";
+import { applyPatch } from "diff";
 import { MCPToolDefinition, MCPToolResult } from "../types";
 import { mergeFrontmatter, splitFrontmatter } from "../helpers/markdown-helper";
 
@@ -11,32 +11,26 @@ function normalizeNotePath(path: string): string {
 	return normalizedPath;
 }
 
-function applyFuzzyPatch(currentContent: string, patchText: string): { ok: true; content: string } | { ok: false; error: string } {
-	const dmp = new diff_match_patch();
-	let patches: unknown[];
-	try {
-		patches = dmp.patch_fromText(patchText);
-	} catch (error) {
-		return {
-			ok: false,
-			error: `Error: Failed to parse patch text. ${error instanceof Error ? error.message : String(error)}`
-		};
+function applyUnifiedPatch(currentContent: string, patchText: string): { ok: true; content: string } | { ok: false; error: string } {
+	const patched = applyPatch(currentContent, patchText, {
+		fuzzFactor: 10
+	});
+
+	if (patched === false) {
+		return { ok: false, error: "Error: Failed to apply unified patch to markdown content." };
 	}
-	const [patchedContent, results] = dmp.patch_apply(patches, currentContent);
-	if (!results.every(Boolean)) {
-		return { ok: false, error: "Error: Failed to apply fuzzy patch. The target text was not found." };
-	}
-	return { ok: true, content: patchedContent };
+
+	return { ok: true, content: patched };
 }
 
 
 /**
  * Built-in tool: edit_note
- * Applies a diff-match-patch format patch to a note in the vault
+ * Applies a unified diff patch to a note in the vault
  */
 export const editNoteTool: MCPToolDefinition = {
 	name: "edit_note",
-	description: "Apply a diff-match-patch format patch to markdown content in a note, excluding frontmatter.",
+	description: "Apply a unified diff patch to markdown content in a note, excluding frontmatter.",
 	inputSchema: {
 		type: "object",
 		properties: {
@@ -46,7 +40,7 @@ export const editNoteTool: MCPToolDefinition = {
 			},
 			patch: {
 				type: "string",
-				description: "Patch to apply in diff-match-patch text format against markdown body content (frontmatter excluded)."
+				description: "Unified diff patch to apply against markdown body content (frontmatter excluded)."
 			},
 			create: {
 				type: "boolean",
@@ -136,17 +130,17 @@ export const editNoteTool: MCPToolDefinition = {
 			// Read the current content
 			const currentContent = file ? await context.vault.read(file) : "";
 			const { frontmatter, body } = splitFrontmatter(currentContent);
-			const fuzzyResult = applyFuzzyPatch(body, patch);
-			if (!fuzzyResult.ok) {
+			const patchResult = applyUnifiedPatch(body, patch);
+			if (!patchResult.ok) {
 				return {
 					content: [{
 						type: "text",
-						text: fuzzyResult.error
+						text: patchResult.error
 					}],
 					isError: true
 				};
 			}
-			const nextBodyContent = fuzzyResult.content;
+			const nextBodyContent = patchResult.content;
 			const nextContent = mergeFrontmatter(frontmatter, nextBodyContent);
 
 			if (nextBodyContent === body) {
