@@ -222,6 +222,7 @@ export class McpProxyClient {
 	private readonly mcpBaseUrl: string;
 	private readonly timeout: number;
 	private readonly apiKey: string;
+	private sessionId: string | null = null;
 
 	constructor(config?: Partial<BridgeClientConfig>) {
 		const mergedConfig = resolveConfig(config);
@@ -244,8 +245,12 @@ export class McpProxyClient {
 		const payload = JSON.stringify({
 			jsonrpc: "2.0",
 			id: 1,
-			method: "tools/list",
-			params: {},
+			method: "initialize",
+			params: {
+				protocolVersion: "2025-11-25",
+				capabilities: {},
+				clientInfo: { name: "obsidian-mcp-bridge", version: "unknown" },
+			},
 		});
 
 		try {
@@ -273,6 +278,9 @@ export class McpProxyClient {
 			if (apiKey) {
 				headers["X-ObsiScripta-Api-Key"] = apiKey;
 			}
+			if (this.sessionId) {
+				headers["Mcp-Session-Id"] = this.sessionId;
+			}
 
 			const response = await fetch(url, {
 				method,
@@ -280,6 +288,11 @@ export class McpProxyClient {
 				body: body ?? undefined,
 				signal: controller.signal,
 			});
+
+			const sessionIdHeader = response.headers.get("mcp-session-id");
+			if (sessionIdHeader) {
+				this.sessionId = sessionIdHeader;
+			}
 
 			const text = await response.text();
 

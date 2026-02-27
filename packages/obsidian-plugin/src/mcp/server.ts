@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serve, ServerType } from "@hono/node-server";
+import { randomUUID } from "crypto";
 import type { Socket } from "net";
 import { ToolExecutor } from "./tools/executor";
 import { registerBridgeV1Routes } from "./bridge-v1";
@@ -10,6 +11,9 @@ import {
 	createParseErrorResponse,
 	createInvalidRequestResponse,
 } from "./mcp-api";
+import type { MCPSessionInfo, JSONRPCRequest, JSONRPCResponse } from "./mcp-types";
+
+declare const __BRIDGE_VERSION__: string;
 
 export class BridgeServer {
 	private static readonly MAX_BODY_BYTES = 1024 * 1024;
@@ -17,6 +21,7 @@ export class BridgeServer {
 		"2025-03-26",
 		"2025-11-25",
 	]);
+	private static readonly DEFAULT_PROTOCOL_VERSION = "2025-03-26";
 	private httpServer: ServerType | null = null;
 	private sockets = new Set<Socket>();
 	private readonly executor: ToolExecutor;
@@ -25,6 +30,7 @@ export class BridgeServer {
 	private port: number;
 	private host: string;
 	private app: Hono;
+	private sessions = new Map<string, MCPSessionInfo>();
 
 	constructor(
 		executor: ToolExecutor,
@@ -60,6 +66,31 @@ export class BridgeServer {
 		}
 
 		return token.trim();
+	}
+
+	private createSession(): MCPSessionInfo {
+		const sessionId = randomUUID();
+		const now = Date.now();
+		const info: MCPSessionInfo = {
+			sessionId,
+			createdAt: now,
+			lastAccessedAt: now,
+		};
+		this.sessions.set(sessionId, info);
+		return info;
+	}
+
+	private getSession(sessionId: string): MCPSessionInfo | null {
+		const info = this.sessions.get(sessionId);
+		if (!info) {
+			return null;
+		}
+		info.lastAccessedAt = Date.now();
+		return info;
+	}
+
+	private deleteSession(sessionId: string): boolean {
+		return this.sessions.delete(sessionId);
 	}
 
 	private isAllowedOrigin(originHeader: string | undefined): boolean {
@@ -110,6 +141,36 @@ export class BridgeServer {
 		return BridgeServer.SUPPORTED_PROTOCOL_VERSIONS.has(versionHeader);
 	}
 
+	private resolveProtocolVersion(request: JSONRPCRequest): string {
+		const params = request.params as Record<string, unknown> | undefined;
+		const requested = params?.protocolVersion;
+		if (
+			typeof requested === "string" &&
+			BridgeServer.SUPPORTED_PROTOCOL_VERSIONS.has(requested)
+		) {
+			return requested;
+		}
+
+		return BridgeServer.DEFAULT_PROTOCOL_VERSION;
+	}
+
+	private createInitializeResponse(request: JSONRPCRequest): JSONRPCResponse {
+		return {
+			jsonrpc: "2.0",
+			id: request.id,
+			result: {
+				protocolVersion: this.resolveProtocolVersion(request),
+				capabilities: {
+					tools: { listChanged: true },
+				},
+				serverInfo: {
+					name: "obsiscripta-bridge-plugin",
+					version: __BRIDGE_VERSION__,
+				},
+			},
+		};
+	}
+
 	/**
 	 * Create and configure Hono app
 	 */
@@ -146,7 +207,7 @@ export class BridgeServer {
 					}
 					return origin ?? undefined;
 				},
-				allowMethods: ["GET", "POST", "OPTIONS"],
+				allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
 				allowHeaders: ["Content-Type", "Mcp-Session-Id", "Mcp-Protocol-Version", "Authorization", "X-ObsiScripta-Api-Key"],
 			}),
 		);
@@ -237,6 +298,8 @@ export class BridgeServer {
 		});
 
 		app.post("/mcp", async (c) => {
+			const sessionIdHeader = c.req.header("mcp-session-id");
+
 			// Parse request body
 			let body: unknown;
 			try {
@@ -256,17 +319,80 @@ export class BridgeServer {
 			}
 
 			const request = parsed;
+			const isInitialize = request.method === "initialize";
+
+			let activeSessionId: string | null = sessionIdHeader ?? null;
+			if (isInitialize) {
+				if (sessionIdHeader) {
+					const existing = this.getSession(sessionIdHeader);
+					if (!existing) {
+						return c.json(
+							{
+								error: "Session not found",
+								message:
+									"Session is invalid or has expired. Re-initialize without MCP-Session-Id.",
+							},
+							404,
+						);
+					}
+				} else {
+					const created = this.createSession();
+					activeSessionId = created.sessionId;
+				}
+			} else {
+				if (!sessionIdHeader) {
+					return c.json(
+						{
+							error: "Session required",
+							message:
+								"MCP-Session-Id header is required after initialization.",
+						},
+						400,
+					);
+				}
+				const existing = this.getSession(sessionIdHeader);
+				if (!existing) {
+					return c.json(
+						{
+							error: "Session not found",
+							message:
+								"Session is invalid or has expired. Re-initialize without MCP-Session-Id.",
+						},
+						404,
+					);
+				}
+			}
+
+			if (
+				isInitialize &&
+				typeof (request.params as Record<string, unknown> | undefined)
+					?.protocolVersion === "string" &&
+				!this.isSupportedProtocolVersion(
+					(request.params as Record<string, unknown>).protocolVersion as string
+				)
+			) {
+				const errorResponse = createInvalidRequestResponse(
+					"Unsupported protocolVersion in initialize request",
+				);
+				return c.json(errorResponse, 400);
+			}
 
 			// Handle the request
 			try {
-				const response = await handleMCPRequest(
-					request,
-					this.executor.getRegistry(),
-					this.executor.getContext()
-				);
+				const response =
+					request.method === "initialize"
+						? this.createInitializeResponse(request)
+						: await handleMCPRequest(
+								request,
+								this.executor.getRegistry(),
+								this.executor.getContext()
+						  );
 
 				// For Phase 1, we return application/json (no SSE streaming)
 				// Phase 2+ will add SSE support when needed
+				if (isInitialize && activeSessionId) {
+					c.header("Mcp-Session-Id", activeSessionId);
+				}
 				return c.json(response, 200);
 			} catch (error) {
 				console.error("[Bridge] Error handling MCP request:", error);
@@ -286,6 +412,33 @@ export class BridgeServer {
 					500
 				);
 			}
+		});
+
+		// MCP session termination (optional per spec)
+		app.delete("/mcp", (c) => {
+			const sessionIdHeader = c.req.header("mcp-session-id");
+			if (!sessionIdHeader) {
+				return c.json(
+					{
+						error: "Session required",
+						message: "MCP-Session-Id header is required for DELETE.",
+					},
+					400,
+				);
+			}
+
+			if (!this.deleteSession(sessionIdHeader)) {
+				return c.json(
+					{
+						error: "Session not found",
+						message:
+							"Session is invalid or has expired. Re-initialize without MCP-Session-Id.",
+					},
+					404,
+				);
+			}
+
+			return c.body(null, 204);
 		});
 
 		// 404 handler

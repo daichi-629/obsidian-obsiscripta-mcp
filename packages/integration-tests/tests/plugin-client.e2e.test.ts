@@ -86,6 +86,58 @@ describe('PluginClient Fake HTTP fallback E2E', () => {
     expect(probeOk).toBe(false);
   });
 
+  it('stores session id from MCP responses and sends on subsequent requests', async () => {
+    const observedSessionIds: Array<string | undefined> = [];
+    let requestCount = 0;
+
+    const fake = await startFakeServer((req, res) => {
+      if (req.method === 'POST' && req.url === '/mcp') {
+        requestCount += 1;
+        observedSessionIds.push(req.headers['mcp-session-id'] as string | undefined);
+        if (requestCount === 1) {
+          res.setHeader('mcp-session-id', 'session-123');
+        }
+        res.setHeader('content-type', 'application/json');
+        res.end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: requestCount,
+            result: {
+              tools: [],
+            },
+          }),
+        );
+        return;
+      }
+
+      res.statusCode = 404;
+      res.end(JSON.stringify({ error: 'not found', message: 'not found' }));
+    });
+    cleanup.push(fake.close);
+
+    const client = new McpProxyClient({ port: fake.port, timeout: 200 });
+
+    await client.proxyMcpRequest(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-11-25',
+          capabilities: {},
+          clientInfo: { name: 'test-client', version: '1.0.0' },
+        },
+      }),
+    );
+
+    await client.proxyMcpRequest(
+      JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }),
+    );
+
+    expect(observedSessionIds[0]).toBeUndefined();
+    expect(observedSessionIds[1]).toBe('session-123');
+  });
+
   it('does not send MCP API key to v1 endpoint', async () => {
     let v1ApiKeyHeader: string | undefined;
 

@@ -87,13 +87,37 @@ describe('BridgeServer MCP authentication E2E', () => {
     });
     expect(wrongAuthResponse.status).toBe(401);
 
+    const initResponse = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-obsiscripta-api-key': apiKey,
+        'mcp-protocol-version': '2025-11-25',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 3,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-11-25',
+          capabilities: {},
+          clientInfo: { name: 'test-client', version: '1.0.0' },
+        },
+      }),
+    });
+    expect(initResponse.status).toBe(200);
+    const sessionId = initResponse.headers.get('mcp-session-id');
+    expect(sessionId).toBeTruthy();
+
     const validAuthResponse = await fetch(`${baseUrl}/mcp`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         'x-obsiscripta-api-key': apiKey,
+        'mcp-protocol-version': '2025-11-25',
+        'mcp-session-id': sessionId ?? '',
       },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/list', params: {} }),
+      body: JSON.stringify({ jsonrpc: '2.0', id: 4, method: 'tools/list', params: {} }),
     });
     expect(validAuthResponse.status).toBe(200);
 
