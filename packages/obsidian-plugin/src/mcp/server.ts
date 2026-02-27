@@ -58,6 +58,46 @@ export class BridgeServer {
 		return token.trim();
 	}
 
+	private isAllowedOrigin(originHeader: string | undefined): boolean {
+		if (!originHeader) {
+			return true;
+		}
+
+		if (originHeader === "null") {
+			return false;
+		}
+
+		let origin: URL;
+		try {
+			origin = new URL(originHeader);
+		} catch {
+			return false;
+		}
+
+		if (origin.protocol !== "http:" && origin.protocol !== "https:") {
+			return false;
+		}
+
+		const port =
+			origin.port ||
+			(origin.protocol === "https:" ? "443" : "80");
+		if (port !== String(this.port)) {
+			return false;
+		}
+
+		const allowedHosts = new Set<string>([
+			"localhost",
+			"127.0.0.1",
+			"::1",
+		]);
+
+		if (this.host && this.host !== "0.0.0.0" && this.host !== "::") {
+			allowedHosts.add(this.host);
+		}
+
+		return allowedHosts.has(origin.hostname);
+	}
+
 	/**
 	 * Create and configure Hono app
 	 */
@@ -68,11 +108,32 @@ export class BridgeServer {
 			registerBridgeV1Routes(app, this.executor, BridgeServer.MAX_BODY_BYTES);
 		}
 
+		// Origin verification for MCP standard HTTP
+		app.use("/mcp", async (c, next) => {
+			const originHeader = c.req.header("origin");
+			if (!this.isAllowedOrigin(originHeader)) {
+				return c.json(
+					{
+						error: "Origin not allowed",
+						message:
+							"Origin is not allowed for MCP requests. Use localhost or loopback origin.",
+					},
+					403,
+				);
+			}
+			return await next();
+		});
+
 		// CORS middleware for MCP standard HTTP
 		app.use(
 			"/mcp",
 			cors({
-				origin: "*",
+				origin: (origin) => {
+					if (!this.isAllowedOrigin(origin)) {
+						return null;
+					}
+					return origin ?? undefined;
+				},
 				allowMethods: ["GET", "POST", "OPTIONS"],
 				allowHeaders: ["Content-Type", "Mcp-Session-Id", "Authorization", "X-ObsiScripta-Api-Key"],
 			}),
