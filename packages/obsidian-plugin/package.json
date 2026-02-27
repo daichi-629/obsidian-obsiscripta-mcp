@@ -1,6 +1,6 @@
 {
 	"name": "obsiscripta-bridge-plugin",
-	"version": "0.2.1",
+	"version": "0.2.2",
 	"description": "Obsidian plugin for ObsiScripta Bridge",
 	"main": "main.js",
 	"type": "module",
