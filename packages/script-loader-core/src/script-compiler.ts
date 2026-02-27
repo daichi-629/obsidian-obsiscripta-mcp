@@ -1,5 +1,5 @@
 import { transform } from "sucrase";
-import { ScriptLoaderType } from "./types";
+import { ScriptCompiler, ScriptLoaderType } from "./types";
 
 interface CompiledScriptCacheEntry {
 	mtime: number;
@@ -10,7 +10,7 @@ interface CompiledScriptCacheEntry {
  * Compiles TypeScript/JavaScript scripts with caching.
  * Uses Sucrase for fast compilation without type checking.
  */
-export class ScriptCompiler {
+export class DefaultScriptCompiler implements ScriptCompiler {
 	private cache: Map<string, CompiledScriptCacheEntry> = new Map();
 
 	/**

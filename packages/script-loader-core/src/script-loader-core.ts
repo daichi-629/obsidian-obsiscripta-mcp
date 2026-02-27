@@ -1,15 +1,14 @@
 import {
 	Disposable,
 	Logger,
-	PathUtils,
 	ScriptExecutionContext,
 	ScriptHost,
 	ScriptLoaderCallbacks,
 	ScriptLoaderType,
 	ScriptMetadata,
+	ScriptCompiler,
 } from "./types";
 import { ScriptRegistry } from "./script-registry";
-import { ScriptCompiler } from "./script-compiler";
 import { ScriptRuntime } from "./runtime";
 
 const DEFAULT_RELOAD_DEBOUNCE_MS = 300;
@@ -20,7 +19,6 @@ const DEFAULT_RELOAD_DEBOUNCE_MS = 300;
  */
 export class ScriptLoaderCore {
 	private scriptHost: ScriptHost;
-	private pathUtils: PathUtils;
 	private logger: Logger;
 	private scriptRegistry: ScriptRegistry;
 	private compiler: ScriptCompiler;
@@ -28,31 +26,26 @@ export class ScriptLoaderCore {
 	private scriptContext: ScriptExecutionContext;
 	private callbacks: ScriptLoaderCallbacks;
 	private reloadTimer: number | null = null;
-	private scriptsPath: string;
 	private watchDisposable: Disposable | null = null;
 	private reloadDebounceMs: number;
 
 	constructor(
 		scriptHost: ScriptHost,
-		pathUtils: PathUtils,
 		logger: Logger,
 		scriptRegistry: ScriptRegistry,
 		compiler: ScriptCompiler,
 		runtime: ScriptRuntime,
 		scriptContext: ScriptExecutionContext,
-		scriptsPath: string,
 		callbacks?: ScriptLoaderCallbacks,
 		reloadDebounceMs: number = DEFAULT_RELOAD_DEBOUNCE_MS
 	) {
 		this.scriptHost = scriptHost;
-		this.pathUtils = pathUtils;
 		this.logger = logger;
 		this.scriptRegistry = scriptRegistry;
 		this.compiler = compiler;
 		this.runtime = runtime;
 		this.scriptContext = scriptContext;
 		this.callbacks = callbacks ?? {};
-		this.scriptsPath = this.normalizeScriptsPath(scriptsPath);
 		this.reloadDebounceMs = reloadDebounceMs;
 	}
 
@@ -65,7 +58,6 @@ export class ScriptLoaderCore {
 			await this.runtime.initialize();
 		}
 
-		await this.ensureScriptsFolder();
 		await this.reloadAllScripts();
 		this.startWatching();
 	}
@@ -93,20 +85,6 @@ export class ScriptLoaderCore {
 	}
 
 	/**
-	 * Update the scripts path and reload
-	 */
-	async updateScriptsPath(scriptsPath: string): Promise<void> {
-		const nextPath = this.normalizeScriptsPath(scriptsPath);
-		if (nextPath === this.scriptsPath) {
-			return;
-		}
-		await this.unregisterAllScripts();
-		this.scriptsPath = nextPath;
-		await this.ensureScriptsFolder();
-		await this.reloadAllScripts();
-	}
-
-	/**
 	 * Manually reload all scripts
 	 */
 	async reloadScripts(): Promise<void> {
@@ -114,100 +92,45 @@ export class ScriptLoaderCore {
 	}
 
 	/**
-	 * Get the current scripts path
-	 */
-	getScriptsPath(): string {
-		return this.scriptsPath;
-	}
-
-	/**
-	 * Normalize the scripts path
-	 */
-	private normalizeScriptsPath(settingPath?: string): string {
-		const fallback = this.pathUtils.normalize("mcp-tools");
-		const trimmed = settingPath?.trim();
-		if (!trimmed) {
-			return fallback;
-		}
-
-		const normalized = trimmed.replace(/\\/g, "/");
-		if (normalized.startsWith("/") || normalized.includes("..")) {
-			return fallback;
-		}
-
-		const cleaned = normalized.replace(/^\.?\//, "");
-		return this.pathUtils.normalize(cleaned);
-	}
-
-	/**
 	 * Unregister all scripts
 	 */
 	private async unregisterAllScripts(): Promise<void> {
-		const allPaths = this.scriptRegistry.getPaths();
-		await Promise.all(allPaths.map(path => this.unregisterScript(path)));
+		const allIdentifiers = this.scriptRegistry.getIdentifiers();
+		await Promise.all(allIdentifiers.map(identifier => this.unregisterScript(identifier)));
 		this.compiler.clear();
 	}
 
 	/**
-	 * Derive a tool name from the script path relative to the scripts folder.
-	 * This ensures uniqueness by design since file paths are unique.
+	 * Derive a tool name from a script identifier.
+	 * This ensures uniqueness by design since identifiers are unique.
 	 */
-	private deriveToolName(scriptPath: string): string {
-		const normalizedScriptPath = scriptPath.replace(/\\/g, "/");
-		const normalizedScriptsPath = this.scriptsPath.replace(/\\/g, "/");
-
-		let relativePath = normalizedScriptPath;
-		if (normalizedScriptPath.startsWith(normalizedScriptsPath + "/")) {
-			relativePath = normalizedScriptPath.slice(normalizedScriptsPath.length + 1);
+	private deriveToolName(identifier: string, loader?: ScriptLoaderType): string {
+		let normalized = identifier.replace(/\\/g, "/").replace(/^\.?\//, "");
+		// Remove known file extension when available
+		if (loader === "js") {
+			normalized = normalized.replace(/\.js$/, "");
+		} else if (loader === "ts") {
+			normalized = normalized.replace(/\.ts$/, "");
 		}
-
-		// Remove file extension (.js, .ts)
-		relativePath = relativePath.replace(/\.(js|ts)$/, "");
-
-		return relativePath;
-	}
-
-	/**
-	 * Ensure the scripts folder exists
-	 */
-	private async ensureScriptsFolder(): Promise<void> {
-		if (!this.scriptsPath) {
-			throw new Error("Scripts path is not set");
-		}
-
-		try {
-			await this.scriptHost.ensureDirectory(this.scriptsPath);
-			this.logger.debug(`[ScriptLoaderCore] Scripts folder ready: ${this.scriptsPath}`);
-		} catch (error) {
-			this.logger.error(`[ScriptLoaderCore] Failed to ensure scripts folder: ${this.scriptsPath}`, error);
-			throw error;
-		}
+		return normalized;
 	}
 
 	/**
 	 * Start watching for file changes
 	 */
 	private startWatching(): void {
-		this.watchDisposable = this.scriptHost.watch(this.scriptsPath, {
-			onCreate: (path) => {
-				if (this.isScriptPath(path)) {
-					this.scheduleReload();
-				}
+		this.watchDisposable = this.scriptHost.watch({
+			onCreate: (identifier) => {
+				this.scheduleReload();
 			},
-			onModify: (path) => {
-				if (this.isScriptPath(path)) {
-					this.scheduleReload();
-				}
+			onModify: (identifier) => {
+				this.scheduleReload();
 			},
-			onDelete: (path) => {
-				if (this.isScriptPath(path)) {
-					this.scheduleReload();
-				}
+			onDelete: (identifier) => {
+				this.scheduleReload();
 			},
-			onRename: (newPath, oldPath) => {
-				if (this.isScriptPath(newPath) || this.isScriptPath(oldPath)) {
-					this.scheduleReload();
-				}
+			onRename: (newIdentifier, oldIdentifier) => {
+				this.scheduleReload();
 			},
 		});
 	}
@@ -230,26 +153,26 @@ export class ScriptLoaderCore {
 	 * Reload all scripts
 	 */
 	private async reloadAllScripts(): Promise<void> {
-		const scriptPaths = await this.scriptHost.listFiles(this.scriptsPath);
-		const scriptSet = new Set(scriptPaths);
+		const scriptFiles = await this.scriptHost.listFiles();
+		const scriptSet = new Set(scriptFiles.map((entry) => entry.identifier));
 
 		// Load new/modified scripts
-		for (const scriptPath of scriptPaths) {
-			await this.loadScript(scriptPath);
+		for (const entry of scriptFiles) {
+			await this.loadScript(entry.identifier, entry.loader);
 		}
 
 		// Remove scripts that no longer exist
 		const removedScripts: string[] = [];
-		for (const path of this.scriptRegistry.getPaths()) {
-			if (!scriptSet.has(path)) {
-				removedScripts.push(path);
+		for (const identifier of this.scriptRegistry.getIdentifiers()) {
+			if (!scriptSet.has(identifier)) {
+				removedScripts.push(identifier);
 			}
 		}
 
 		// Unregister removed scripts in parallel
-		await Promise.all(removedScripts.map(async path => {
-			const metadata = this.scriptRegistry.get(path);
-			await this.unregisterScript(path);
+		await Promise.all(removedScripts.map(async identifier => {
+			const metadata = this.scriptRegistry.get(identifier);
+			await this.unregisterScript(identifier);
 			this.logger.debug(`[ScriptLoaderCore] Removed script: ${metadata?.name}`);
 		}));
 	}
@@ -257,27 +180,20 @@ export class ScriptLoaderCore {
 	/**
 	 * Load a single script
 	 */
-	private async loadScript(scriptPath: string): Promise<void> {
-		const loader = this.getLoaderForPath(scriptPath);
-		if (!loader) {
-			return;
-		}
-		if (this.callbacks.isScriptPath && !this.callbacks.isScriptPath(scriptPath)) {
-			return;
-		}
-
+	private async loadScript(identifier: string, loader: ScriptLoaderType): Promise<void> {
 		try {
-			const fileInfo = await this.scriptHost.readFile(scriptPath);
-			const compiled = await this.compiler.compile(scriptPath, fileInfo.contents, loader, fileInfo.mtime);
+			const fileInfo = await this.scriptHost.readFile(identifier);
+			const compiled = await this.compiler.compile(identifier, fileInfo.contents, loader, fileInfo.mtime);
 
 			// Load script using runtime
-			const handle = await this.runtime.load(compiled, scriptPath, this.scriptContext);
+			const handle = await this.runtime.load(compiled, identifier, this.scriptContext);
 
-			// Derive name from script path to ensure uniqueness
-			const name = this.deriveToolName(scriptPath);
+			// Derive name from script identifier to ensure uniqueness
+			const name = this.scriptHost.deriveToolName?.(identifier, loader)
+				?? this.deriveToolName(identifier, loader);
 
 			const metadata: ScriptMetadata = {
-				path: scriptPath,
+				identifier,
 				name,
 				mtime: fileInfo.mtime,
 				compiledCode: compiled,
@@ -286,9 +202,9 @@ export class ScriptLoaderCore {
 
 			this.registerScript(metadata, handle.exports);
 		} catch (error) {
-			this.logger.error(`[ScriptLoaderCore] Failed to load script ${scriptPath}:`, error);
-			await this.unregisterScript(scriptPath);
-			this.callbacks.onScriptError?.(scriptPath, error as Error);
+			this.logger.error(`[ScriptLoaderCore] Failed to load script ${identifier}:`, error);
+			await this.unregisterScript(identifier);
+			this.callbacks.onScriptError?.(identifier, error as Error);
 		}
 	}
 
@@ -303,8 +219,8 @@ export class ScriptLoaderCore {
 	/**
 	 * Unregister a script
 	 */
-	private async unregisterScript(scriptPath: string): Promise<void> {
-		const metadata = this.scriptRegistry.get(scriptPath);
+	private async unregisterScript(identifier: string): Promise<void> {
+		const metadata = this.scriptRegistry.get(identifier);
 		if (!metadata) {
 			return;
 		}
@@ -314,33 +230,9 @@ export class ScriptLoaderCore {
 			await this.runtime.unload(metadata.handle.id);
 		}
 
-		this.scriptRegistry.unregister(scriptPath);
-		this.compiler.invalidate(scriptPath);
+		this.scriptRegistry.unregister(identifier);
+		this.compiler.invalidate(identifier);
 		this.callbacks.onScriptUnloaded?.(metadata);
 	}
 
-	/**
-	 * Get the loader type for a file path
-	 */
-	private getLoaderForPath(filePath: string): ScriptLoaderType | null {
-		const lowerPath = filePath.toLowerCase();
-		if (lowerPath.endsWith(".js")) {
-			return "js";
-		}
-		if (lowerPath.endsWith(".ts") && !lowerPath.endsWith(".d.ts")) {
-			return "ts";
-		}
-		return null;
-	}
-
-	/**
-	 * Check if a path is a script file
-	 */
-	private isScriptPath(filePath?: string): boolean {
-		if (!filePath) {
-			return false;
-		}
-		const lowerPath = filePath.toLowerCase();
-		return lowerPath.endsWith(".js") || (lowerPath.endsWith(".ts") && !lowerPath.endsWith(".d.ts"));
-	}
 }

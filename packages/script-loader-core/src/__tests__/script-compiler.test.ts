@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { ScriptCompiler } from "../script-compiler";
-import { ScriptExecutor } from "../script-executor";
-import type { PathUtils } from "../types";
+import { DefaultScriptCompiler } from "../script-compiler";
+import { FunctionRuntime, type ExecutionContextConfig } from "../function-runtime";
 
 /**
  * ScriptCompiler Tests
@@ -11,10 +10,10 @@ import type { PathUtils } from "../types";
  */
 
 describe("ScriptCompiler - Desired Behavior", () => {
-	let compiler: ScriptCompiler;
+	let compiler: DefaultScriptCompiler;
 
 	beforeEach(() => {
-		compiler = new ScriptCompiler();
+		compiler = new DefaultScriptCompiler();
 	});
 
 	describe("TypeScript Compilation Contract", () => {
@@ -266,26 +265,13 @@ describe("ScriptCompiler - Desired Behavior", () => {
 			expect(compiled).toContain("named");
 
 			// Verify exports are actually accessible when executed
-			const pathUtils: PathUtils = {
-				join: (...parts: string[]) => parts.join("/"),
-				dirname: (p: string) => p.split("/").slice(0, -1).join("/"),
-				normalize: (p: string) => p,
-				isAbsolute: (p: string) => p.startsWith("/"),
-				relative: (from: string, to: string) =>
-					to.startsWith(from) ? to.slice(from.length).replace(/^\/+/, "") : to,
+			const contextConfig: ExecutionContextConfig = {
+				variableNames: [],
+				provideContext: () => ({}),
 			};
-			const executor = new ScriptExecutor(
-				{
-					variableNames: [],
-					provideContext: () => ({}),
-				},
-				{ pathUtils }
-			);
-
-			const result = executor.execute(compiled, "/exports.js", {}) as Record<
-				string,
-				unknown
-			>;
+			const runtime = new FunctionRuntime(contextConfig);
+			const handle = await runtime.load(compiled, "/exports.js", {});
+			const result = handle.exports as Record<string, unknown>;
 
 			// Verify that exports are actually accessible
 			expect(result).toBeDefined();

@@ -2,7 +2,7 @@ import { Vault } from "obsidian";
 import {
 	ScriptLoaderCore,
 	ScriptRegistry,
-	ScriptCompiler,
+	DefaultScriptCompiler,
 	FunctionRuntime,
 	ScriptRuntime,
 	ExecutionContextConfig,
@@ -11,9 +11,9 @@ import {
 } from "@obsiscripta/script-loader-core";
 import { ScriptExecutionContext } from "./types";
 import { ObsidianVaultAdapter, EventRegistrar } from "./adapters/obsidian-vault-adapter";
-import { ObsidianPathUtils } from "./adapters/obsidian-path-utils";
 import { ObsidianLogger } from "./adapters/obsidian-logger";
 import { ObsidianModuleResolver } from "./adapters/obsidian-module-resolver";
+import path from "path";
 
 /**
  * Obsidian-specific wrapper for ScriptLoaderCore.
@@ -21,7 +21,8 @@ import { ObsidianModuleResolver } from "./adapters/obsidian-module-resolver";
  */
 export class ScriptLoader {
 	private core: ScriptLoaderCore;
-	private pathUtils: ObsidianPathUtils;
+	private scriptHost: ObsidianVaultAdapter;
+	private scriptsPath: string;
 
 	constructor(
 		vault: Vault,
@@ -32,24 +33,22 @@ export class ScriptLoader {
 		scriptsPath: string,
 		callbacks?: ScriptLoaderCallbacks
 	) {
+		this.scriptsPath = scriptsPath;
 		// Create adapters
-		const scriptHost = new ObsidianVaultAdapter(vault, eventRegistrar);
-		this.pathUtils = new ObsidianPathUtils();
+		this.scriptHost = new ObsidianVaultAdapter(vault, eventRegistrar, scriptsPath);
 		const logger = new ObsidianLogger("[ScriptLoader]");
 
 		// Create compiler
-		const compiler = new ScriptCompiler();
+		const compiler = new DefaultScriptCompiler();
 
 		// Create core loader with all dependencies
 		this.core = new ScriptLoaderCore(
-			scriptHost,
-			this.pathUtils,
+			this.scriptHost,
 			logger,
 			scriptRegistry,
 			compiler,
 			runtime,
 			scriptContext,
-			scriptsPath,
 			callbacks
 		);
 	}
@@ -72,7 +71,9 @@ export class ScriptLoader {
 	 * Update the scripts path
 	 */
 	async updateScriptsPath(scriptsPath: string): Promise<void> {
-		await this.core.updateScriptsPath(scriptsPath);
+		this.scriptsPath = scriptsPath;
+		this.scriptHost.setScriptsPath(scriptsPath);
+		await this.core.reloadScripts();
 	}
 
 	/**
@@ -86,15 +87,14 @@ export class ScriptLoader {
 	 * Get the current scripts path
 	 */
 	getScriptsPath(): string {
-		return this.core.getScriptsPath();
+		return this.scriptsPath;
 	}
 
 	/**
 	 * Normalize a scripts path setting
 	 */
 	static normalizeScriptsPath(settingPath?: string): string {
-		const pathUtils = new ObsidianPathUtils();
-		const fallback = pathUtils.normalize("mcp-tools");
+		const fallback = "mcp-tools";
 		const trimmed = settingPath?.trim();
 		if (!trimmed) {
 			return fallback;
@@ -106,7 +106,7 @@ export class ScriptLoader {
 		}
 
 		const cleaned = normalized.replace(/^\.?\//, "");
-		return pathUtils.normalize(cleaned);
+		return cleaned.replace(/\\/g, "/").replace(/\/+/g, "/");
 	}
 
 	/**
@@ -117,9 +117,21 @@ export class ScriptLoader {
 		vault: Vault,
 		options?: FunctionRuntimeOptions
 	): ScriptRuntime {
-		const pathUtils = options?.pathUtils ?? new ObsidianPathUtils();
-		const moduleResolver = options?.moduleResolver ?? new ObsidianModuleResolver(vault, pathUtils);
-		const runtimeOptions: FunctionRuntimeOptions = { ...options, pathUtils, moduleResolver };
+		const moduleResolver = options?.moduleResolver ?? new ObsidianModuleResolver(vault);
+		const moduleCompiler = options?.moduleCompiler ?? new DefaultScriptCompiler();
+		const dirnameResolver = options?.dirnameResolver ?? ((identifier: string) => {
+			const dirname = path.posix.dirname(identifier);
+			if (dirname === "." || dirname === "/") {
+				return "";
+			}
+			return dirname;
+		});
+		const runtimeOptions: FunctionRuntimeOptions = {
+			...options,
+			moduleResolver,
+			moduleCompiler,
+			dirnameResolver,
+		};
 
 		return new FunctionRuntime(contextConfig, runtimeOptions);
 	}

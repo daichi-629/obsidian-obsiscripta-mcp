@@ -7,14 +7,13 @@ import { PluginClient } from '../../stdio-bridge/src/plugin-client.js';
 import { StdioBridgeServer } from '../../stdio-bridge/src/bridge-server.js';
 import {
   FunctionRuntime,
-  ScriptCompiler,
+  DefaultScriptCompiler,
   ScriptLoaderCore,
   ScriptRegistry,
   type ExecutionContextConfig,
 } from '../../script-loader-core/src/index.js';
 import {
   MockLogger,
-  MockPathUtils,
   MockScriptHost,
   delay,
 } from '../../script-loader-core/src/__tests__/test-helpers.js';
@@ -55,21 +54,20 @@ describe('script-loader-core + ToolExecutor + BridgeServer + stdio-bridge full i
   it('propagates initial load and hot-reload updates through stdio-bridge tool execution', async () => {
     const apiKey = 'test-api-key';
     const scriptHost = new MockScriptHost();
-    const pathUtils = new MockPathUtils();
     const logger = new MockLogger();
-    const compiler = new ScriptCompiler();
+    const compiler = new DefaultScriptCompiler();
 
     const contextConfig: ExecutionContextConfig = {
       variableNames: ['ctx'],
       provideContext: () => ({ ctx: {} }),
     };
-    const runtime = new FunctionRuntime(contextConfig, { pathUtils });
+    const runtime = new FunctionRuntime(contextConfig);
     const scriptRegistry = new ScriptRegistry(runtime);
 
     const toolRegistry = new ToolRegistry();
     const executor = new ToolExecutor(toolRegistry, { vault: {}, app: {} } as never);
 
-    const scriptPath = 'mcp-tools/dynamic/echo.ts';
+    const scriptPath = 'dynamic/echo.ts';
     scriptHost.setFile(
       scriptPath,
       `export default {
@@ -88,16 +86,14 @@ describe('script-loader-core + ToolExecutor + BridgeServer + stdio-bridge full i
 
     const loader = new ScriptLoaderCore(
       scriptHost,
-      pathUtils,
       logger,
       scriptRegistry,
       compiler,
       runtime,
       {},
-      'mcp-tools',
       {
         onScriptLoaded: (metadata, exports) => {
-          const tool = validateAndConvertScriptExports(exports, metadata.path, metadata.name);
+          const tool = validateAndConvertScriptExports(exports, metadata.identifier, metadata.name);
           toolRegistry.register(tool, ToolSource.Script);
         },
         onScriptUnloaded: (metadata) => {

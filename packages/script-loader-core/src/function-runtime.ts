@@ -1,4 +1,4 @@
-import { ModuleResolver, PathUtils, ScriptExecutionContext } from "./types";
+import { ModuleResolver, ModuleResolution, ScriptExecutionContext, ScriptCompiler } from "./types";
 import { ScriptRuntime, ScriptHandle } from "./runtime";
 
 type RequireFn = (id: string) => unknown;
@@ -17,15 +17,17 @@ export interface ExecutionContextConfig {
  * Options for creating the Function-based runtime
  */
 export interface FunctionRuntimeOptions {
-	/** Path utilities for path operations */
-	pathUtils?: PathUtils;
 	/** Optional module resolver for shared modules */
 	moduleResolver?: ModuleResolver;
+	/** Optional compiler for module resolver sources */
+	moduleCompiler?: ScriptCompiler;
+	/** Optional dirname resolver for identifiers */
+	dirnameResolver?: (identifier: string) => string;
 }
 
 /**
  * Function-based script runtime that uses the Function constructor for execution.
- * This is the default runtime that maintains backward compatibility with the original ScriptExecutor.
+ * This is the default runtime for executing scripts.
  *
  * Security Note: This runtime uses the Function constructor to execute user-provided scripts.
  * This is intentional and necessary for the dynamic script loading functionality.
@@ -36,7 +38,7 @@ export class FunctionRuntime implements ScriptRuntime {
 	private options?: FunctionRuntimeOptions;
 	private handles: Map<string, ScriptHandle> = new Map();
 	private moduleCache: Map<string, unknown> = new Map();
-	private moduleResolutionCache: Map<string, string> = new Map();
+	private moduleResolutionCache: Map<string, ModuleResolution> = new Map();
 	private moduleLoaders: Map<string, Promise<void>> = new Map();
 
 	constructor(contextConfig: ExecutionContextConfig, options?: FunctionRuntimeOptions) {
@@ -54,16 +56,16 @@ export class FunctionRuntime implements ScriptRuntime {
 	/**
 	 * Load a script using the Function constructor
 	 */
-	async load(code: string, scriptPath: string, context: ScriptExecutionContext): Promise<ScriptHandle> {
+	async load(code: string, identifier: string, context: ScriptExecutionContext): Promise<ScriptHandle> {
 		const module = { exports: {} as Record<string, unknown> };
 		if (this.options?.moduleResolver) {
-			await this.preloadRequires(code, scriptPath, context);
+			await this.preloadRequires(code, identifier, context);
 		}
-		const localRequire = this.getLocalRequire(scriptPath);
-		const dirname = this.getDirname(scriptPath);
+		const localRequire = this.getLocalRequire(identifier);
+		const dirname = this.getDirname(identifier);
 
 		// Get context variables from configuration
-		const contextVars = this.contextConfig.provideContext(scriptPath, context);
+		const contextVars = this.contextConfig.provideContext(identifier, context);
 
 		// Build function parameters
 		const baseParams = ["module", "exports"];
@@ -78,7 +80,7 @@ export class FunctionRuntime implements ScriptRuntime {
 		if (localRequire) {
 			baseArgs.push(localRequire);
 		}
-		baseArgs.push(scriptPath, dirname);
+		baseArgs.push(identifier, dirname);
 		const contextArgs = this.contextConfig.variableNames.map(name => contextVars[name]);
 		const allArgs = [...baseArgs, ...contextArgs];
 
@@ -92,10 +94,10 @@ export class FunctionRuntime implements ScriptRuntime {
 
 		// Create and store handle
 		const handle: ScriptHandle = {
-			id: scriptPath,
+			id: identifier,
 			exports,
 		};
-		this.handles.set(scriptPath, handle);
+		this.handles.set(identifier, handle);
 
 		return handle;
 	}
@@ -172,38 +174,38 @@ export class FunctionRuntime implements ScriptRuntime {
 	/**
 	 * Create a resolver-backed require function when a ModuleResolver is provided.
 	 */
-	private getLocalRequire(scriptPath: string): RequireFn | undefined {
+	private getLocalRequire(identifier: string): RequireFn | undefined {
 		if (!this.options?.moduleResolver) {
 			return undefined;
 		}
-		return (specifier: string) => this.requireFromCache(specifier, scriptPath);
+		return (specifier: string) => this.requireFromCache(specifier, identifier);
 	}
 
-	private requireFromCache(specifier: string, fromPath: string): unknown {
-		const resolvedPath = this.getResolvedPath(specifier, fromPath);
-		const cached = this.moduleCache.get(resolvedPath);
+	private requireFromCache(specifier: string, fromIdentifier: string): unknown {
+		const resolvedId = this.getResolvedId(specifier, fromIdentifier);
+		const cached = this.moduleCache.get(resolvedId);
 		if (cached === undefined) {
-			throw new Error(`Module '${specifier}' from '${fromPath}' was not preloaded`);
+			throw new Error(`Module '${specifier}' from '${fromIdentifier}' was not preloaded`);
 		}
 		return cached;
 	}
 
-	private getResolvedPath(specifier: string, fromPath: string): string {
-		const cacheKey = this.getResolutionKey(fromPath, specifier);
+	private getResolvedId(specifier: string, fromIdentifier: string): string {
+		const cacheKey = this.getResolutionKey(fromIdentifier, specifier);
 		const resolved = this.moduleResolutionCache.get(cacheKey);
 		if (!resolved) {
-			throw new Error(`Cannot resolve module '${specifier}' from '${fromPath}'`);
+			throw new Error(`Cannot resolve module '${specifier}' from '${fromIdentifier}'`);
 		}
-		return resolved;
+		return resolved.id;
 	}
 
-	private getResolutionKey(fromPath: string, specifier: string): string {
-		return `${fromPath}::${specifier}`;
+	private getResolutionKey(fromIdentifier: string, specifier: string): string {
+		return `${fromIdentifier}::${specifier}`;
 	}
 
 	private async preloadRequires(
 		code: string,
-		fromPath: string,
+		fromIdentifier: string,
 		context: ScriptExecutionContext
 	): Promise<void> {
 		const resolver = this.options?.moduleResolver;
@@ -213,63 +215,66 @@ export class FunctionRuntime implements ScriptRuntime {
 
 		const specifiers = this.extractRequireSpecifiers(code);
 		for (const specifier of specifiers) {
-			const cacheKey = this.getResolutionKey(fromPath, specifier);
+			const cacheKey = this.getResolutionKey(fromIdentifier, specifier);
 			if (!this.moduleResolutionCache.has(cacheKey)) {
-				const resolvedPath = await resolver.resolve(specifier, fromPath);
-				if (!resolvedPath) {
-					throw new Error(`Cannot resolve module '${specifier}' from '${fromPath}'`);
+				const resolution = await resolver.resolve(specifier, fromIdentifier);
+				if (!resolution) {
+					throw new Error(`Cannot resolve module '${specifier}' from '${fromIdentifier}'`);
 				}
-				this.moduleResolutionCache.set(cacheKey, resolvedPath);
-				await this.loadModule(resolvedPath, context);
+				this.moduleResolutionCache.set(cacheKey, resolution);
+				await this.loadModule(resolution, context);
 			}
 		}
 	}
 
-	private async loadModule(resolvedPath: string, context: ScriptExecutionContext): Promise<void> {
-		if (this.moduleCache.has(resolvedPath)) {
+	private async loadModule(resolution: ModuleResolution, context: ScriptExecutionContext): Promise<void> {
+		if (this.moduleCache.has(resolution.id)) {
 			return;
 		}
-		const existing = this.moduleLoaders.get(resolvedPath);
+		const existing = this.moduleLoaders.get(resolution.id);
 		if (existing) {
 			await existing;
 			return;
 		}
 
-		const loader = this.executeModule(resolvedPath, context);
-		this.moduleLoaders.set(resolvedPath, loader);
+		const loader = this.executeModule(resolution, context);
+		this.moduleLoaders.set(resolution.id, loader);
 		try {
 			await loader;
 		} finally {
-			this.moduleLoaders.delete(resolvedPath);
+			this.moduleLoaders.delete(resolution.id);
 		}
 	}
 
-	private async executeModule(resolvedPath: string, context: ScriptExecutionContext): Promise<void> {
-		const resolver = this.options?.moduleResolver;
-		if (!resolver) {
-			throw new Error("Module resolver is not configured");
+	private async executeModule(resolution: ModuleResolution, context: ScriptExecutionContext): Promise<void> {
+		let moduleCode = resolution.code;
+		if (this.options?.moduleCompiler && resolution.loader && !resolution.compiled) {
+			moduleCode = await this.options.moduleCompiler.compile(
+				resolution.id,
+				resolution.code,
+				resolution.loader,
+				resolution.mtime
+			);
 		}
-
-		const moduleInfo = await resolver.load(resolvedPath);
 		const module = { exports: {} as Record<string, unknown> };
-		this.moduleCache.set(resolvedPath, module.exports);
+		this.moduleCache.set(resolution.id, module.exports);
 
-		await this.preloadRequires(moduleInfo.code, resolvedPath, context);
+		await this.preloadRequires(moduleCode, resolution.id, context);
 
-		const dirname = this.getDirname(resolvedPath);
-		const localRequire = (specifier: string) => this.requireFromCache(specifier, resolvedPath);
+		const dirname = this.getDirname(resolution.id);
+		const localRequire = (specifier: string) => this.requireFromCache(specifier, resolution.id);
 
-		const contextVars = this.contextConfig.provideContext(resolvedPath, context);
+		const contextVars = this.contextConfig.provideContext(resolution.id, context);
 		const baseParams = ["module", "exports", "require", "__filename", "__dirname"];
 		const allParams = [...baseParams, ...this.contextConfig.variableNames];
-		const baseArgs: unknown[] = [module, module.exports, localRequire, resolvedPath, dirname];
+		const baseArgs: unknown[] = [module, module.exports, localRequire, resolution.id, dirname];
 		const contextArgs = this.contextConfig.variableNames.map(name => contextVars[name]);
 		const allArgs = [...baseArgs, ...contextArgs];
 
-		const runner = new Function(...allParams, moduleInfo.code);
+		const runner = new Function(...allParams, moduleCode);
 		runner(...allArgs);
 
-		this.moduleCache.set(resolvedPath, module.exports);
+		this.moduleCache.set(resolution.id, module.exports);
 	}
 
 	private extractRequireSpecifiers(code: string): string[] {
@@ -286,16 +291,10 @@ export class FunctionRuntime implements ScriptRuntime {
 	/**
 	 * Get the directory name from a script path
 	 */
-	private getDirname(scriptPath: string): string {
-		if (this.options?.pathUtils) {
-			return this.options.pathUtils.dirname(scriptPath);
+	private getDirname(identifier: string): string {
+		if (this.options?.dirnameResolver) {
+			return this.options.dirnameResolver(identifier);
 		}
-		// Fallback implementation
-		const normalized = scriptPath.replace(/\\/g, "/");
-		const lastSlash = normalized.lastIndexOf("/");
-		if (lastSlash === -1) {
-			return "";
-		}
-		return normalized.slice(0, lastSlash);
+		return "";
 	}
 }

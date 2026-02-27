@@ -5,11 +5,12 @@
 
 import type {
 	ScriptHost,
-	PathUtils,
 	Logger,
 	FileInfo,
 	Disposable,
 	WatchHandlers,
+	ScriptFileEntry,
+	ScriptLoaderType,
 } from "../types";
 
 /**
@@ -17,68 +18,62 @@ import type {
  */
 export class MockScriptHost implements ScriptHost {
 	private files = new Map<string, { contents: string; mtime: number }>();
-	private watchers: Array<{ root: string; handlers: WatchHandlers }> = [];
+	private watchers: WatchHandlers[] = [];
 
-	setFile(path: string, contents: string, mtime: number = Date.now()): void {
-		this.files.set(path, { contents, mtime });
+	setFile(identifier: string, contents: string, mtime: number = Date.now()): void {
+		this.files.set(identifier, { contents, mtime });
 	}
 
-	deleteFile(path: string): void {
-		this.files.delete(path);
+	deleteFile(identifier: string): void {
+		this.files.delete(identifier);
 	}
 
-	updateFile(path: string, contents: string, mtime: number = Date.now()): void {
-		this.setFile(path, contents, mtime);
+	updateFile(identifier: string, contents: string, mtime: number = Date.now()): void {
+		this.setFile(identifier, contents, mtime);
 	}
 
-	triggerCreate(path: string): void {
-		this.watchers.forEach((w) => {
-			if (path.startsWith(w.root)) {
-				w.handlers.onCreate?.(path);
-			}
+	triggerCreate(identifier: string): void {
+		this.watchers.forEach((handlers) => {
+			handlers.onCreate?.(identifier);
 		});
 	}
 
-	triggerModify(path: string): void {
-		this.watchers.forEach((w) => {
-			if (path.startsWith(w.root)) {
-				w.handlers.onModify?.(path);
-			}
+	triggerModify(identifier: string): void {
+		this.watchers.forEach((handlers) => {
+			handlers.onModify?.(identifier);
 		});
 	}
 
-	triggerDelete(path: string): void {
-		this.watchers.forEach((w) => {
-			if (path.startsWith(w.root)) {
-				w.handlers.onDelete?.(path);
-			}
+	triggerDelete(identifier: string): void {
+		this.watchers.forEach((handlers) => {
+			handlers.onDelete?.(identifier);
 		});
 	}
 
-	async readFile(path: string): Promise<FileInfo> {
-		const file = this.files.get(path);
+	async readFile(identifier: string): Promise<FileInfo> {
+		const file = this.files.get(identifier);
 		if (!file) {
-			throw new Error(`File not found: ${path}`);
+			throw new Error(`File not found: ${identifier}`);
 		}
 		return file;
 	}
 
-	async listFiles(root: string): Promise<string[]> {
-		const files: string[] = [];
-		for (const [path] of this.files) {
-			if (path.startsWith(root) && (path.endsWith(".js") || path.endsWith(".ts"))) {
-				files.push(path);
+	async listFiles(): Promise<ScriptFileEntry[]> {
+		const files: ScriptFileEntry[] = [];
+		for (const [identifier] of this.files) {
+			const loader = this.getLoaderForPath(identifier);
+			if (loader) {
+				files.push({ identifier, loader });
 			}
 		}
 		return files;
 	}
 
-	watch(root: string, handlers: WatchHandlers): Disposable {
-		const watcher = { root, handlers };
-		this.watchers.push(watcher);
+	watch(handlers: WatchHandlers): Disposable {
+		this.watchers.push(handlers);
 		return {
 			dispose: () => {
-				const index = this.watchers.indexOf(watcher);
+				const index = this.watchers.indexOf(handlers);
 				if (index >= 0) {
 					this.watchers.splice(index, 1);
 				}
@@ -86,52 +81,15 @@ export class MockScriptHost implements ScriptHost {
 		};
 	}
 
-	async exists(path: string): Promise<boolean> {
-		return this.files.has(path);
-	}
-
-	async ensureDirectory(_: string): Promise<void> {
-		// Mock implementation - always succeeds
-	}
-}
-
-/**
- * Mock path utilities for testing
- */
-export class MockPathUtils implements PathUtils {
-	normalize(path: string): string {
-		return path.replace(/\\/g, "/").replace(/\/+/g, "/");
-	}
-
-	isAbsolute(path: string): boolean {
-		return path.startsWith("/");
-	}
-
-	join(...paths: string[]): string {
-		return paths.join("/").replace(/\/+/g, "/");
-	}
-
-	dirname(path: string): string {
-		const normalized = this.normalize(path);
-		const lastSlash = normalized.lastIndexOf("/");
-		if (lastSlash === -1) return "";
-		return normalized.slice(0, lastSlash);
-	}
-
-	relative(from: string, to: string): string {
-		// Simplified implementation for testing
-		const fromParts = from.split("/").filter(Boolean);
-		const toParts = to.split("/").filter(Boolean);
-
-		let i = 0;
-		while (i < fromParts.length && i < toParts.length && fromParts[i] === toParts[i]) {
-			i++;
+	private getLoaderForPath(filePath: string): ScriptLoaderType | null {
+		const lowerPath = filePath.toLowerCase();
+		if (lowerPath.endsWith(".js")) {
+			return "js";
 		}
-
-		const upCount = fromParts.length - i;
-		const remainingPath = toParts.slice(i);
-
-		return [...Array<string>(upCount).fill(".."), ...remainingPath].join("/") || ".";
+		if (lowerPath.endsWith(".ts") && !lowerPath.endsWith(".d.ts")) {
+			return "ts";
+		}
+		return null;
 	}
 }
 

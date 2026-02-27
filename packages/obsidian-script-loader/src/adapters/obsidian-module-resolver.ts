@@ -1,5 +1,6 @@
-import { TFile, Vault } from "obsidian";
-import { ModuleResolver, PathUtils, ScriptCompiler, ScriptLoaderType } from "@obsiscripta/script-loader-core";
+import { normalizePath, TFile, Vault } from "obsidian";
+import path from "path";
+import { ModuleResolution, ModuleResolver, ScriptLoaderType } from "@obsiscripta/script-loader-core";
 
 const MODULE_EXTENSIONS: ScriptLoaderType[] = ["ts", "js"];
 
@@ -14,72 +15,60 @@ const MODULE_EXTENSIONS: ScriptLoaderType[] = ["ts", "js"];
  */
 export class ObsidianModuleResolver implements ModuleResolver {
 	private vault: Vault;
-	private pathUtils: PathUtils;
-	private compiler: ScriptCompiler;
 
-	constructor(vault: Vault, pathUtils: PathUtils) {
+	constructor(vault: Vault) {
 		this.vault = vault;
-		this.pathUtils = pathUtils;
-		this.compiler = new ScriptCompiler();
 	}
 
-	async resolve(specifier: string, fromPath: string): Promise<string | null> {
+	async resolve(specifier: string, fromIdentifier: string): Promise<ModuleResolution | null> {
 		if (!this.isRelativeSpecifier(specifier)) {
 			return null;
 		}
 
-		const fromDir = this.pathUtils.dirname(fromPath);
-		const requested = this.pathUtils.normalize(this.pathUtils.join(fromDir, specifier));
-		if (!this.isVaultRelativePath(requested)) {
+		const fromDir = this.getDirname(fromIdentifier);
+		const requested = this.normalizeIdentifier(path.posix.join(fromDir, specifier));
+		if (!this.isIdentifierPath(requested)) {
 			return null;
 		}
 
 		for (const candidate of this.getCandidates(requested)) {
-			if (!this.isVaultRelativePath(candidate)) {
+			if (!this.isIdentifierPath(candidate)) {
 				continue;
 			}
-			const entry = this.vault.getAbstractFileByPath(candidate);
-			if (entry instanceof TFile) {
-				return candidate;
+			const fullPath = normalizePath(candidate);
+			const entry = this.vault.getAbstractFileByPath(fullPath);
+			if (!(entry instanceof TFile)) {
+				continue;
+			}
+			const loader = this.getLoader(candidate);
+			if (!loader) {
+				continue;
+			}
+			const source = await this.vault.read(entry);
+			return {
+				id: candidate,
+				code: source,
+				mtime: entry.stat?.mtime,
+				loader,
 			}
 		}
 
 		return null;
 	}
 
-	async load(resolvedPath: string): Promise<{ code: string; mtime?: number }> {
-		const file = this.vault.getAbstractFileByPath(resolvedPath);
-		if (!(file instanceof TFile)) {
-			throw new Error(`Module file not found: ${resolvedPath}`);
-		}
-
-		const loader = this.getLoader(resolvedPath);
-		if (!loader) {
-			throw new Error(`Unsupported module type: ${resolvedPath}`);
-		}
-
-		const source = await this.vault.read(file);
-		const code = await this.compiler.compile(resolvedPath, source, loader, file.stat?.mtime);
-
-		return {
-			code,
-			mtime: file.stat?.mtime,
-		};
-	}
-
 	clearCache(): void {
-		this.compiler.clear();
+		// No-op: compilation is handled by FunctionRuntime
 	}
 
 	private isRelativeSpecifier(specifier: string): boolean {
 		return specifier.startsWith("./") || specifier.startsWith("../");
 	}
 
-	private isVaultRelativePath(path: string): boolean {
-		if (!path || this.pathUtils.isAbsolute(path)) {
+	private isIdentifierPath(identifier: string): boolean {
+		if (!identifier || path.posix.isAbsolute(identifier)) {
 			return false;
 		}
-		return !path.startsWith("../") && path !== "..";
+		return !identifier.startsWith("../") && identifier !== "..";
 	}
 
 	private getCandidates(resolvedBase: string): string[] {
@@ -89,7 +78,7 @@ export class ObsidianModuleResolver implements ModuleResolver {
 		}
 
 		const direct = MODULE_EXTENSIONS.map(ext => `${resolvedBase}.${ext}`);
-		const indexed = MODULE_EXTENSIONS.map(ext => this.pathUtils.join(resolvedBase, `index.${ext}`));
+		const indexed = MODULE_EXTENSIONS.map(ext => path.posix.join(resolvedBase, `index.${ext}`));
 		return [...direct, ...indexed];
 	}
 
@@ -102,4 +91,18 @@ export class ObsidianModuleResolver implements ModuleResolver {
 		}
 		return null;
 	}
+
+	private normalizeIdentifier(identifier: string): string {
+		const normalized = path.posix.normalize(identifier).replace(/\\/g, "/");
+		return normalized.replace(/^\.?\//, "");
+	}
+
+	private getDirname(identifier: string): string {
+		const dirname = path.posix.dirname(identifier);
+		if (dirname === "." || dirname === "/") {
+			return "";
+		}
+		return dirname;
+	}
+
 }

@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { FunctionRuntime, type ExecutionContextConfig } from "../function-runtime";
-import { MockPathUtils } from "./test-helpers";
 
 /**
  * FunctionRuntime Tests
@@ -10,19 +9,16 @@ import { MockPathUtils } from "./test-helpers";
  */
 
 describe("FunctionRuntime - Desired Behavior", () => {
-	let pathUtils: MockPathUtils;
-
-	beforeEach(() => {
-		pathUtils = new MockPathUtils();
-	});
-
-	const createRuntime = (config?: ExecutionContextConfig) =>
+	const createRuntime = (
+		config?: ExecutionContextConfig,
+		options?: ConstructorParameters<typeof FunctionRuntime>[1]
+	) =>
 		new FunctionRuntime(
 			config ?? {
 				variableNames: [],
 				provideContext: () => ({}),
 			},
-			{ pathUtils }
+			options
 		);
 
 	describe("Load Contract", () => {
@@ -73,7 +69,16 @@ describe("FunctionRuntime - Desired Behavior", () => {
 		});
 
 		it("should provide __filename and __dirname", async () => {
-			const runtime = createRuntime();
+			const runtime = createRuntime(undefined, {
+				dirnameResolver: (identifier) => {
+					const normalized = identifier.replace(/\\/g, "/");
+					const lastSlash = normalized.lastIndexOf("/");
+					if (lastSlash === -1) {
+						return "";
+					}
+					return normalized.slice(0, lastSlash);
+				},
+			});
 
 			const handle = await runtime.load(
 				"module.exports = { filename: __filename, dirname: __dirname };",

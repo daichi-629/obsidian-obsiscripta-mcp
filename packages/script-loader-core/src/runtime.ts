@@ -5,7 +5,7 @@ import { ScriptExecutionContext } from "./types";
  * This is an opaque reference stored in the registry.
  */
 export interface ScriptHandle {
-	/** Unique identifier for the script (typically the script path) */
+	/** Unique identifier for the script */
 	id: string;
 	/** The raw exports object from the script */
 	exports: unknown;
@@ -25,11 +25,11 @@ export interface ScriptRuntime {
 	/**
 	 * Load and compile a script, returning a handle that can be used for invocation.
 	 * @param code - Compiled JavaScript code
-	 * @param scriptPath - Absolute path to the script file
+	 * @param identifier - Script identifier
 	 * @param context - Execution context for the script
 	 * @returns A handle to the loaded script
 	 */
-	load(code: string, scriptPath: string, context: ScriptExecutionContext): Promise<ScriptHandle>;
+	load(code: string, identifier: string, context: ScriptExecutionContext): Promise<ScriptHandle>;
 
 	/**
 	 * Invoke a function exported by a script.

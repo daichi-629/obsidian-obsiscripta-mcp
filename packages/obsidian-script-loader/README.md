@@ -73,8 +73,8 @@ export default class MyPlugin extends Plugin {
         onScriptUnloaded: (metadata) => {
           console.log("Script unloaded:", metadata.name);
         },
-        onScriptError: (path, error) => {
-          console.error("Script error:", path, error);
+        onScriptError: (identifier, error) => {
+          console.error("Script error:", identifier, error);
         },
       }
     );
@@ -95,7 +95,7 @@ export default class MyPlugin extends Plugin {
 Scripts can export **any** JavaScript object. The library doesn't enforce a specific structure - you decide what shape your scripts should export and validate them in your plugin.
 
 The `onScriptLoaded` callback receives:
-- `metadata`: Information about the script (path, name, mtime, compiledCode)
+- `metadata`: Information about the script (identifier, name, mtime, compiledCode)
 - `exports`: Whatever the script exported (default export or module.exports)
 
 You can then validate and use these exports however you need.
@@ -217,12 +217,12 @@ Central registry for tracking loaded scripts.
 class ScriptRegistry {
   constructor(runtime: ScriptRuntime);
   register(metadata: ScriptMetadata): void;
-  unregister(path: string): void;
-  get(path: string): ScriptMetadata | undefined;
+  unregister(identifier: string): void;
+  get(identifier: string): ScriptMetadata | undefined;
   getByName(name: string): ScriptMetadata[];
   getAll(): ScriptMetadata[];
-  getPaths(): string[];
-  has(path: string): boolean;
+  getIdentifiers(): string[];
+  has(identifier: string): boolean;
   clear(): void;
   count(): number;
 }
@@ -235,7 +235,7 @@ Executes compiled scripts with context injection and returns whatever the script
 ```typescript
 class FunctionRuntime {
   constructor(contextConfig: ExecutionContextConfig, options?: FunctionRuntimeOptions);
-  load(code: string, scriptPath: string, context: ScriptExecutionContext): Promise<ScriptHandle>;
+  load(code: string, identifier: string, context: ScriptExecutionContext): Promise<ScriptHandle>;
   invokeById(scriptId: string, exportPath: string, args: unknown[]): Promise<unknown>;
   getExportById(scriptId: string, exportPath: string): Promise<unknown>;
   unload(scriptId: string): Promise<void>;
@@ -245,14 +245,20 @@ class FunctionRuntime {
 
 ### ScriptCompiler
 
-Compiles TypeScript/JavaScript with caching.
+Abstract compiler interface for TypeScript/JavaScript with caching.
 
 ```typescript
-class ScriptCompiler {
-  compile(path: string, source: string, loader: ScriptLoaderType, mtime?: number): Promise<string>;
-  invalidate(path: string): void;
+interface ScriptCompiler {
+  compile(identifier: string, source: string, loader: ScriptLoaderType, mtime?: number): Promise<string>;
+  invalidate(identifier: string): void;
   clear(): void;
 }
+```
+
+Default implementation:
+
+```typescript
+class DefaultScriptCompiler implements ScriptCompiler {}
 ```
 
 ## License

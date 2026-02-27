@@ -19,10 +19,10 @@ export interface Disposable {
  * Handlers for file system watch events
  */
 export interface WatchHandlers {
-	onCreate?: (path: string) => void;
-	onModify?: (path: string) => void;
-	onDelete?: (path: string) => void;
-	onRename?: (newPath: string, oldPath: string) => void;
+	onCreate?: (identifier: string) => void;
+	onModify?: (identifier: string) => void;
+	onDelete?: (identifier: string) => void;
+	onRename?: (newIdentifier: string, oldIdentifier: string) => void;
 }
 
 /**
@@ -31,61 +31,35 @@ export interface WatchHandlers {
  */
 export interface ScriptHost {
 	/**
-	 * Read a file and return its contents and modification time
+	 * Read a script by identifier and return its contents and modification time
 	 */
-	readFile(path: string): Promise<FileInfo>;
+	readFile(identifier: string): Promise<FileInfo>;
 
 	/**
-	 * List all script files (.js, .ts) recursively in a directory
+	 * List all available script identifiers
 	 */
-	listFiles(root: string): Promise<string[]>;
+	listFiles(): Promise<ScriptFileEntry[]>;
 
 	/**
-	 * Watch a directory for file changes
+	 * Watch for script changes
 	 * @returns Disposable to stop watching
 	 */
-	watch(root: string, handlers: WatchHandlers): Disposable;
+	watch(handlers: WatchHandlers): Disposable;
 
 	/**
-	 * Check if a path exists
+	 * Optional tool name derivation for identifiers.
 	 */
-	exists(path: string): Promise<boolean>;
-
-	/**
-	 * Ensure a directory exists (create if needed)
-	 */
-	ensureDirectory(path: string): Promise<void>;
+	deriveToolName?(identifier: string, loader?: ScriptLoaderType): string;
 }
 
 /**
- * Abstract interface for path operations.
- * Platform-specific implementations handle path normalization.
+ * Script file entry returned by ScriptHost.listFiles
  */
-export interface PathUtils {
-	/**
-	 * Normalize a path (handle separators, relative segments)
-	 */
-	normalize(path: string): string;
-
-	/**
-	 * Check if a path is absolute
-	 */
-	isAbsolute(path: string): boolean;
-
-	/**
-	 * Join path segments
-	 */
-	join(...paths: string[]): string;
-
-	/**
-	 * Get the directory name of a path
-	 */
-	dirname(path: string): string;
-
-	/**
-	 * Get the relative path from 'from' to 'to'
-	 */
-	relative(from: string, to: string): string;
+export interface ScriptFileEntry {
+	/** Script identifier */
+	identifier: string;
+	/** Loader type used for compilation */
+	loader: ScriptLoaderType;
 }
 
 /**
@@ -93,9 +67,27 @@ export interface PathUtils {
  * Implementations define platform-specific rules and access.
  */
 export interface ModuleResolver {
-	resolve(specifier: string, fromPath: string): Promise<string | null>;
-	load(resolvedPath: string): Promise<{ code: string; mtime?: number }>;
+	resolve(specifier: string, fromIdentifier: string): Promise<ModuleResolution | null>;
 	clearCache?(): void;
+}
+
+export interface ModuleResolution {
+	id: string;
+	code: string;
+	mtime?: number;
+	/** Optional loader type to enable runtime compilation */
+	loader?: ScriptLoaderType;
+	/** When true, code is already compiled and should not be recompiled */
+	compiled?: boolean;
+}
+
+/**
+ * Abstract interface for script compilation with caching.
+ */
+export interface ScriptCompiler {
+	compile(path: string, source: string, loader: ScriptLoaderType, mtime?: number): Promise<string>;
+	invalidate(path: string): void;
+	clear(): void;
 }
 
 /**
@@ -113,9 +105,9 @@ export interface Logger {
  * Metadata for a loaded script
  */
 export interface ScriptMetadata {
-	/** Path to the script file */
-	path: string;
-	/** Tool name derived from the script path relative to the watched folder */
+	/** Script identifier */
+	identifier: string;
+	/** Tool name derived from the script identifier */
 	name: string;
 	/** Last modification time of the script file */
 	mtime: number;
@@ -134,15 +126,13 @@ export interface ScriptLoaderCallbacks {
 	/** Called when a script is unloaded (deleted or replaced) */
 	onScriptUnloaded?: (metadata: ScriptMetadata) => void;
 	/** Called when a script fails to load or compile */
-	onScriptError?: (path: string, error: Error) => void;
-	/** Optional filter to decide whether a script should register */
-	isScriptPath?: (path: string) => boolean;
+	onScriptError?: (identifier: string, error: Error) => void;
 }
 
 /**
  * Script file type
  */
-export type ScriptLoaderType = "js" | "ts";
+export type ScriptLoaderType = string;
 
 /**
  * Generic execution context for scripts.

@@ -21,21 +21,21 @@ export class ScriptRegistry {
 	 * Register a script with its metadata (including handle)
 	 */
 	register(metadata: ScriptMetadata): void {
-		this.scripts.set(metadata.path, metadata);
+		this.scripts.set(metadata.identifier, metadata);
 	}
 
 	/**
-	 * Unregister a script by its path
+	 * Unregister a script by its identifier
 	 */
-	unregister(path: string): void {
-		this.scripts.delete(path);
+	unregister(identifier: string): void {
+		this.scripts.delete(identifier);
 	}
 
 	/**
-	 * Get script metadata by path
+	 * Get script metadata by identifier
 	 */
-	get(path: string): ScriptMetadata | undefined {
-		return this.scripts.get(path);
+	get(identifier: string): ScriptMetadata | undefined {
+		return this.scripts.get(identifier);
 	}
 
 	/**
@@ -59,17 +59,17 @@ export class ScriptRegistry {
 	}
 
 	/**
-	 * Get all script paths
+	 * Get all script identifiers
 	 */
-	getPaths(): string[] {
+	getIdentifiers(): string[] {
 		return Array.from(this.scripts.keys());
 	}
 
 	/**
 	 * Check if a script is registered
 	 */
-	has(path: string): boolean {
-		return this.scripts.has(path);
+	has(identifier: string): boolean {
+		return this.scripts.has(identifier);
 	}
 
 	/**
@@ -88,19 +88,19 @@ export class ScriptRegistry {
 
 	/**
 	 * Invoke a function exported by a script.
-	 * @param path - Script path
+	 * @param identifier - Script identifier
 	 * @param exportPath - Dot-separated path to the export (e.g., "default", "handlers.process")
 	 * @param args - Arguments to pass to the function
 	 * @returns The return value of the function
 	 * @throws Error if the script is not found or export is not a function
 	 */
-	async invoke(path: string, exportPath: string, args: unknown[]): Promise<unknown> {
-		const metadata = this.scripts.get(path);
+	async invoke(identifier: string, exportPath: string, args: unknown[]): Promise<unknown> {
+		const metadata = this.scripts.get(identifier);
 		if (!metadata) {
-			throw new Error(`Script not found: ${path}`);
+			throw new Error(`Script not found: ${identifier}`);
 		}
 		if (!metadata.handle) {
-			throw new Error(`Script not loaded with runtime support: ${path}. This script may have been loaded with the legacy ScriptExecutor.`);
+			throw new Error(`Script not loaded with runtime support: ${identifier}.`);
 		}
 
 		return this.runtime.invokeById(metadata.handle.id, exportPath, args);
@@ -108,18 +108,18 @@ export class ScriptRegistry {
 
 	/**
 	 * Get an exported value from a script.
-	 * @param path - Script path
+	 * @param identifier - Script identifier
 	 * @param exportPath - Dot-separated path to the export (e.g., "default", "config.apiKey")
 	 * @returns The exported value
 	 * @throws Error if the script is not found or export doesn't exist
 	 */
-	async getExport(path: string, exportPath: string): Promise<unknown> {
-		const metadata = this.scripts.get(path);
+	async getExport(identifier: string, exportPath: string): Promise<unknown> {
+		const metadata = this.scripts.get(identifier);
 		if (!metadata) {
-			throw new Error(`Script not found: ${path}`);
+			throw new Error(`Script not found: ${identifier}`);
 		}
 		if (!metadata.handle) {
-			throw new Error(`Script not loaded with runtime support: ${path}. This script may have been loaded with the legacy ScriptExecutor.`);
+			throw new Error(`Script not loaded with runtime support: ${identifier}.`);
 		}
 
 		return this.runtime.getExportById(metadata.handle.id, exportPath);

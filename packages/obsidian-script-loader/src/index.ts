@@ -16,7 +16,6 @@ export type { EventRegistrar } from "./adapters/obsidian-vault-adapter";
  * Obsidian adapters for core interfaces
  */
 export { ObsidianVaultAdapter } from "./adapters/obsidian-vault-adapter";
-export { ObsidianPathUtils } from "./adapters/obsidian-path-utils";
 export { ObsidianLogger } from "./adapters/obsidian-logger";
 export { ObsidianModuleResolver } from "./adapters/obsidian-module-resolver";
 
@@ -24,7 +23,7 @@ export { ObsidianModuleResolver } from "./adapters/obsidian-module-resolver";
 // Re-export core classes for convenience
 // ============================================================================
 
-export { ScriptRegistry, ScriptCompiler, FunctionRuntime } from "@obsiscripta/script-loader-core";
+export { ScriptRegistry, DefaultScriptCompiler, FunctionRuntime } from "@obsiscripta/script-loader-core";
 
 // ============================================================================
 // Types
@@ -45,7 +44,6 @@ export type {
 	ScriptLoaderCallbacks,
 	ScriptLoaderType,
 	Logger,
-	PathUtils,
 	ScriptHost,
 	ScriptRuntime,
 } from "@obsiscripta/script-loader-core";

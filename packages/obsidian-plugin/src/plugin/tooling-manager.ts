@@ -81,24 +81,24 @@ export class ToolingManager {
 			{
 				onScriptLoaded: (metadata, exports) => {
 					if (!isToolDefinitionLike(exports)) {
-						console.debug(`[Bridge] Ignoring non-tool script file: ${metadata.path}`);
+						console.debug(`[Bridge] Ignoring non-tool script file: ${metadata.identifier}`);
 						return;
 					}
 
 					try {
 						// Validate and convert script exports to MCP tool definition
-						const tool = validateAndConvertScriptExports(exports, metadata.path, metadata.name);
+						const tool = validateAndConvertScriptExports(exports, metadata.identifier, metadata.name);
 						this.registry.register(tool, ToolSource.Script);
 					} catch (error) {
-						console.error(`[Bridge] Invalid script exports in ${metadata.path}:`, error);
+						console.error(`[Bridge] Invalid script exports in ${metadata.identifier}:`, error);
 					}
 				},
 				onScriptUnloaded: (metadata) => {
 					// Unregister tool when script is unloaded
 					this.registry.unregister(metadata.name);
 				},
-				onScriptError: (path, error) => {
-					console.error(`[Bridge] Script error in ${path}:`, error);
+				onScriptError: (identifier, error) => {
+					console.error(`[Bridge] Script error in ${identifier}:`, error);
 				},
 			}
 		);

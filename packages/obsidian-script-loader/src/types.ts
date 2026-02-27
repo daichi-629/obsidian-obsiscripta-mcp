@@ -20,6 +20,5 @@ export type {
 	ScriptLoaderCallbacks,
 	ScriptLoaderType,
 	Logger,
-	PathUtils,
 	ScriptHost,
 } from "@obsiscripta/script-loader-core";

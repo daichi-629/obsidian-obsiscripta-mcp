@@ -15,12 +15,8 @@ export { ScriptRegistry } from "./script-registry";
 /**
  * TypeScript/JavaScript compiler with caching
  */
-export { ScriptCompiler } from "./script-compiler";
+export { DefaultScriptCompiler } from "./script-compiler";
 
-/**
- * Script executor with context injection (deprecated - use FunctionRuntime)
- */
-export { ScriptExecutor } from "./script-executor";
 
 /**
  * Function-based script runtime
@@ -41,10 +37,6 @@ export type { ScriptRuntime, ScriptHandle } from "./runtime";
  */
 export type { ExecutionContextConfig } from "./function-runtime";
 
-/**
- * Options for ScriptExecutor (deprecated - use FunctionRuntimeOptions)
- */
-export type { ScriptExecutorOptions } from "./script-executor";
 
 /**
  * Options for FunctionRuntime
@@ -56,12 +48,13 @@ export type { FunctionRuntimeOptions } from "./function-runtime";
  */
 export type {
 	ScriptHost,
-	PathUtils,
 	Logger,
 	FileInfo,
 	Disposable,
 	WatchHandlers,
 	ModuleResolver,
+	ScriptFileEntry,
+	ScriptCompiler,
 } from "./types";
 
 /**
@@ -72,4 +65,5 @@ export type {
 	ScriptLoaderCallbacks,
 	ScriptLoaderType,
 	ScriptExecutionContext,
+	ModuleResolution,
 } from "./types";

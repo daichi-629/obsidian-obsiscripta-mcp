@@ -4,7 +4,7 @@ Platform-independent core for dynamic script loading with hot reload support.
 
 ## Overview
 
-This package provides the core logic for loading, compiling, and executing scripts without any platform-specific dependencies. It's designed to work in any JavaScript environment (Node.js, browser, Obsidian, etc.) by accepting abstract interfaces for file system operations and path handling.
+This package provides the core logic for loading, compiling, and executing scripts without any platform-specific dependencies. It's designed to work in any JavaScript environment (Node.js, browser, Obsidian, etc.) by accepting abstract interfaces for file system operations.
 
 ## Features
 
@@ -19,16 +19,11 @@ This package provides the core logic for loading, compiling, and executing scrip
 The core depends on three key interfaces plus optional module resolution:
 
 ### ScriptHost
-Abstracts file system operations:
-- `readFile(path)`: Read file contents and modification time
-- `listFiles(root)`: List all script files in a directory
-- `watch(root, handlers)`: Watch for file changes
-
-### PathUtils
-Abstracts path operations:
-- `normalize(path)`: Normalize path separators
-- `isAbsolute(path)`: Check if path is absolute
-- `join(...paths)`: Join path segments
+Abstracts script storage and change tracking:
+- `readFile(identifier)`: Read script contents and modification time
+- `listFiles()`: List all script identifiers, returning `{ identifier, loader }`
+- `watch(handlers)`: Watch for script changes
+- `deriveToolName?(identifier, loader)`: Optional identifier → tool name mapping
 
 ### Logger
 Abstracts logging:
@@ -36,33 +31,26 @@ Abstracts logging:
 
 ### ModuleResolver (optional)
 Resolves and loads script modules for `require()`:
-- `resolve(fromId, request)`: Map a module request to an id and code
-- `load(resolution)`: Return the module source code
+- `resolve(specifier, fromIdentifier)`: Return `{ id, code, loader?, mtime?, compiled? }`
 
 ## Usage
-
-Use `FunctionRuntime` for execution; `ScriptExecutor` is deprecated.
 
 ```typescript
 import {
   ScriptLoaderCore,
   ScriptRegistry,
-  ScriptCompiler,
+  DefaultScriptCompiler,
   FunctionRuntime,
   type ExecutionContextConfig
 } from "@obsiscripta/script-loader-core";
 
 // Implement the required interfaces for your platform
 const scriptHost: ScriptHost = {
-  async readFile(path) { /* ... */ },
-  async listFiles(root) { /* ... */ },
-  watch(root, handlers) { /* ... */ }
-};
-
-const pathUtils: PathUtils = {
-  normalize(path) { /* ... */ },
-  isAbsolute(path) { /* ... */ },
-  join(...paths) { /* ... */ }
+  async readFile(identifier) { /* ... */ },
+  async listFiles() {
+    return [{ identifier: "scripts/example.ts", loader: "ts" }];
+  },
+  watch(handlers) { /* ... */ }
 };
 
 const logger: Logger = {
@@ -73,28 +61,22 @@ const logger: Logger = {
 };
 
 // Create the core loader
-const registry = new ScriptRegistry();
-const compiler = new ScriptCompiler();
+const compiler = new DefaultScriptCompiler();
 const contextConfig: ExecutionContextConfig = {
   /* ... */
 };
-const runtime = new FunctionRuntime(contextConfig, { pathUtils });
+const runtime = new FunctionRuntime(contextConfig);
+const registry = new ScriptRegistry(runtime);
 
 const loader = new ScriptLoaderCore(
   scriptHost,
-  pathUtils,
   logger,
   registry,
   compiler,
   runtime,
-  "scripts",
   {
-    isScriptPath: (path) => path.endsWith(".js"),
     moduleResolver: {
-      async resolve(fromId, request) {
-        /* ... */
-      },
-      async load(resolution) {
+      async resolve(specifier, fromIdentifier) {
         /* ... */
       }
     }
