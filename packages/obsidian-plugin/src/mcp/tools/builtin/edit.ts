@@ -1,5 +1,5 @@
 import { normalizePath, TFile } from "obsidian";
-import { applyPatch } from "diff";
+import { applyPatch, parsePatch } from "diff";
 import { MCPToolDefinition, MCPToolResult } from "../types";
 import { mergeFrontmatter, splitFrontmatter } from "../helpers/markdown-helper";
 
@@ -11,16 +11,102 @@ function normalizeNotePath(path: string): string {
 	return normalizedPath;
 }
 
-function applyUnifiedPatch(currentContent: string, patchText: string): { ok: true; content: string } | { ok: false; error: string } {
-	const patched = applyPatch(currentContent, patchText, {
-		fuzzFactor: 10
-	});
+function normalizeLineEndings(value: string): string {
+	return value.replace(/\r\n/g, "\n");
+}
 
-	if (patched === false) {
-		return { ok: false, error: "Error: Failed to apply unified patch to markdown content." };
+function stripGitDiffMetadata(patchText: string): string {
+	return patchText
+		.replace(/^diff --git .*(\n|$)/gm, "")
+		.replace(/^index .*(\n|$)/gm, "")
+		.replace(/^new file mode .*(\n|$)/gm, "")
+		.replace(/^deleted file mode .*(\n|$)/gm, "")
+		.replace(/^similarity index .*(\n|$)/gm, "")
+		.replace(/^rename from .*(\n|$)/gm, "")
+		.replace(/^rename to .*(\n|$)/gm, "");
+}
+
+function ensureUnifiedHeaders(patchText: string): string {
+	if (/^--- /m.test(patchText) && /^\+\+\+ /m.test(patchText)) {
+		return patchText;
+	}
+	return `--- a/body.md\n+++ b/body.md\n${patchText}`;
+}
+
+function collectPatchCandidates(patchText: string): string[] {
+	const normalized = normalizeLineEndings(patchText).replace(/^\uFEFF/, "");
+	const withTrailingNewline = normalized.endsWith("\n") ? normalized : `${normalized}\n`;
+	const stripped = stripGitDiffMetadata(withTrailingNewline);
+	const candidates = new Set<string>([
+		withTrailingNewline,
+		stripped,
+		ensureUnifiedHeaders(stripped)
+	]);
+
+	return Array.from(candidates).filter((candidate) => candidate.trim().length > 0);
+}
+
+function buildContentFromEmptyPatch(patchText: string): string | null {
+	try {
+		const patches = parsePatch(patchText);
+		if (patches.length !== 1) {
+			return null;
+		}
+		const patch = patches[0]!;
+		const lines: string[] = [];
+
+		for (const hunk of patch.hunks ?? []) {
+			for (const line of hunk.lines ?? []) {
+				if (line.startsWith("+")) {
+					lines.push(line.slice(1));
+					continue;
+				}
+				if (line.startsWith("\\") || line.startsWith("@")) {
+					continue;
+				}
+				if (line.startsWith(" ") || line.startsWith("-")) {
+					return null;
+				}
+			}
+		}
+
+		return lines.join("\n");
+	} catch {
+		return null;
+	}
+}
+
+function applyUnifiedPatch(currentContent: string, patchText: string): { ok: true; content: string } | { ok: false; error: string } {
+	const normalizedContent = normalizeLineEndings(currentContent);
+	const candidates = collectPatchCandidates(patchText);
+
+	if (normalizedContent.length === 0) {
+		for (const candidate of candidates) {
+			const built = buildContentFromEmptyPatch(candidate);
+			if (built !== null) {
+				return { ok: true, content: built };
+			}
+		}
 	}
 
-	return { ok: true, content: patched };
+	let lastError: string | null = null;
+
+	for (const candidate of candidates) {
+		try {
+			const patched = applyPatch(normalizedContent, candidate, {
+				fuzzFactor: 10
+			});
+			if (patched === false) {
+				lastError = "Error: Failed to apply unified patch to markdown content.";
+				continue;
+			}
+			return { ok: true, content: patched };
+		} catch (error) {
+			lastError = `Error: ${error instanceof Error ? error.message : String(error)}`;
+		}
+	}
+
+	return { ok: false, error: lastError ?? "Error: Failed to apply unified patch to markdown content." };
 }
 
 

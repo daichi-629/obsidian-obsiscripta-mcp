@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { TFile } from "obsidian";
-import { readNoteTool } from "../../mcp/tools/builtin/notes";
+import { readNoteTool } from "../../mcp/tools/builtin/read";
 
 function createTFile(path: string, basename: string): TFile {
 	const file = new TFile();
