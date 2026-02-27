@@ -50,7 +50,7 @@ export class ScriptLoaderCore {
 	}
 
 	/**
-	 * Start the script loader: ensure scripts folder, load all scripts, start watching
+	 * Start the script loader: load all scripts, start watching
 	 */
 	async start(): Promise<void> {
 		// Initialize runtime if it has an initialize method
@@ -120,16 +120,16 @@ export class ScriptLoaderCore {
 	 */
 	private startWatching(): void {
 		this.watchDisposable = this.scriptHost.watch({
-			onCreate: (identifier) => {
+			onCreate: (_identifier) => {
 				this.scheduleReload();
 			},
-			onModify: (identifier) => {
+			onModify: (_identifier) => {
 				this.scheduleReload();
 			},
-			onDelete: (identifier) => {
+			onDelete: (_identifier) => {
 				this.scheduleReload();
 			},
-			onRename: (newIdentifier, oldIdentifier) => {
+			onRename: (_newIdentifier, _oldIdentifier) => {
 				this.scheduleReload();
 			},
 		});
