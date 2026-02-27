@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serve, ServerType } from "@hono/node-server";
-import { randomUUID } from "crypto";
 import type { Socket } from "net";
 import { ToolExecutor } from "./tools/executor";
 import { registerBridgeV1Routes } from "./bridge-v1";
@@ -11,7 +10,8 @@ import {
 	createParseErrorResponse,
 	createInvalidRequestResponse,
 } from "./mcp-api";
-import type { MCPSessionInfo, JSONRPCRequest, JSONRPCResponse } from "./mcp-types";
+import type { JSONRPCRequest, JSONRPCResponse } from "./mcp-types";
+import { SessionManagement } from "./session-management";
 
 declare const __BRIDGE_VERSION__: string;
 
@@ -30,7 +30,7 @@ export class BridgeServer {
 	private port: number;
 	private host: string;
 	private app: Hono;
-	private sessions = new Map<string, MCPSessionInfo>();
+	private readonly sessionManager = new SessionManagement();
 
 	constructor(
 		executor: ToolExecutor,
@@ -66,31 +66,6 @@ export class BridgeServer {
 		}
 
 		return token.trim();
-	}
-
-	private createSession(): MCPSessionInfo {
-		const sessionId = randomUUID();
-		const now = Date.now();
-		const info: MCPSessionInfo = {
-			sessionId,
-			createdAt: now,
-			lastAccessedAt: now,
-		};
-		this.sessions.set(sessionId, info);
-		return info;
-	}
-
-	private getSession(sessionId: string): MCPSessionInfo | null {
-		const info = this.sessions.get(sessionId);
-		if (!info) {
-			return null;
-		}
-		info.lastAccessedAt = Date.now();
-		return info;
-	}
-
-	private deleteSession(sessionId: string): boolean {
-		return this.sessions.delete(sessionId);
 	}
 
 	private isAllowedOrigin(originHeader: string | undefined): boolean {
@@ -324,7 +299,7 @@ export class BridgeServer {
 			let activeSessionId: string | null = sessionIdHeader ?? null;
 			if (isInitialize) {
 				if (sessionIdHeader) {
-					const existing = this.getSession(sessionIdHeader);
+					const existing = this.sessionManager.getSession(sessionIdHeader);
 					if (!existing) {
 						return c.json(
 							{
@@ -336,7 +311,7 @@ export class BridgeServer {
 						);
 					}
 				} else {
-					const created = this.createSession();
+					const created = this.sessionManager.createSession();
 					activeSessionId = created.sessionId;
 				}
 			} else {
@@ -350,7 +325,7 @@ export class BridgeServer {
 						400,
 					);
 				}
-				const existing = this.getSession(sessionIdHeader);
+				const existing = this.sessionManager.getSession(sessionIdHeader);
 				if (!existing) {
 					return c.json(
 						{
@@ -385,7 +360,12 @@ export class BridgeServer {
 						: await handleMCPRequest(
 								request,
 								this.executor.getRegistry(),
-								this.executor.getContext()
+								{
+									...this.executor.getContext(),
+									session: activeSessionId
+										? this.sessionManager.getSessionStore(activeSessionId)
+										: undefined,
+								}
 						  );
 
 				// For Phase 1, we return application/json (no SSE streaming)
@@ -427,7 +407,7 @@ export class BridgeServer {
 				);
 			}
 
-			if (!this.deleteSession(sessionIdHeader)) {
+			if (!this.sessionManager.deleteSession(sessionIdHeader)) {
 				return c.json(
 					{
 						error: "Session not found",

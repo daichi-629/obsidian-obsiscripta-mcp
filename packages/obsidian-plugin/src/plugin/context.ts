@@ -1,6 +1,13 @@
 import { App, EventRef, Vault } from "obsidian";
 import type MCPPlugin from "../main";
 
+export interface SessionDataStore {
+	get<T = unknown>(key: string): T | undefined;
+	add<T = unknown>(key: string, value: T): void;
+	set<T = unknown>(key: string, value: T): void;
+	delete(key: string): boolean;
+}
+
 /**
  * Minimal application context interface.
  * Exposes only the essential Obsidian primitives needed by tool handlers.
@@ -14,6 +21,8 @@ export interface AppContext {
 	vault: Vault;
 	/** Obsidian App instance for global app state */
 	app: App;
+	/** MCP session-scoped data store (only available for /mcp requests) */
+	session?: SessionDataStore;
 }
 
 /**
