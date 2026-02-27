@@ -3,7 +3,7 @@ import type MCPPlugin from "../main";
 import { MCPPluginSettings } from "../settings";
 import { MCPToolDefinition } from "../mcp/tools/types";
 import { ToolRegistry, ToolSource } from "../mcp/tools/registry";
-import { getBuiltinNoteTools } from "../mcp/tools/builtin/notes";
+import { getBuiltinNoteTools } from "../mcp/tools/builtin/read";
 import { getBuiltinNoteOutlineTools } from "../mcp/tools/builtin/note-outline";
 import { getBuiltinEditTools } from "../mcp/tools/builtin/edit";
 import {
