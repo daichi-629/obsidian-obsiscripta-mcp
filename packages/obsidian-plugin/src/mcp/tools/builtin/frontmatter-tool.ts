@@ -51,8 +51,8 @@ export const readFrontmatterTool: MCPToolDefinition = {
 		required: ["path"],
 	},
 	handler: async (args, context): Promise<MCPToolResult> => {
-		const path = args.path as string;
-		const keys = args.keys as unknown;
+		const path = typeof args.path === "string" ? args.path : "";
+		const keys = args.keys;
 		const includeMissing = args.include_missing === true;
 
 		if (!path || path.trim().length === 0) {
@@ -125,8 +125,6 @@ export const readFrontmatterTool: MCPToolDefinition = {
 	},
 };
 
-type EditMode = "set" | "merge" | "delete";
-
 export const editFrontmatterTool: MCPToolDefinition = {
 	name: "edit_frontmatter",
 	description: "Edit YAML frontmatter in a note. Does not modify the markdown body.",
@@ -163,10 +161,10 @@ export const editFrontmatterTool: MCPToolDefinition = {
 		required: ["path"],
 	},
 	handler: async (args, context): Promise<MCPToolResult> => {
-		const path = args.path as string;
-		const mode = (args.mode as EditMode | undefined) ?? "set";
-		const data = args.data as unknown;
-		const keys = args.keys as unknown;
+		const path = typeof args.path === "string" ? args.path : "";
+		const mode = typeof args.mode === "string" ? args.mode : "set";
+		const data = args.data;
+		const keys = args.keys;
 		const allowCreate = args.allow_create === true;
 
 		if (!path || path.trim().length === 0) {
@@ -176,7 +174,7 @@ export const editFrontmatterTool: MCPToolDefinition = {
 			};
 		}
 
-		if (!(["set", "merge", "delete"] as string[]).includes(mode)) {
+		if (!["set", "merge", "delete"].includes(mode)) {
 			return {
 				content: [{ type: "text", text: "Error: mode must be one of \"set\", \"merge\", or \"delete\"." }],
 				isError: true,
@@ -198,7 +196,8 @@ export const editFrontmatterTool: MCPToolDefinition = {
 		}
 
 		const normalizedPath = normalizeNotePath(path);
-		let file = context.vault.getAbstractFileByPath(normalizedPath);
+		const abstractFile = context.vault.getAbstractFileByPath(normalizedPath);
+		let file: TFile | null = abstractFile instanceof TFile ? abstractFile : null;
 
 		if (!file && !allowCreate) {
 			return {
@@ -207,7 +206,7 @@ export const editFrontmatterTool: MCPToolDefinition = {
 			};
 		}
 
-		if (file && !(file instanceof TFile)) {
+		if (abstractFile && !file) {
 			return {
 				content: [{ type: "text", text: `Error: Path "${normalizedPath}" is a folder, not a note` }],
 				isError: true,
@@ -248,7 +247,8 @@ export const editFrontmatterTool: MCPToolDefinition = {
 			}
 
 			if (mode === "delete") {
-				for (const key of keys as string[]) {
+				const deleteKeys = keys as string[];
+				for (const key of deleteKeys) {
 					if (Object.prototype.hasOwnProperty.call(nextFrontmatter, key)) {
 						delete nextFrontmatter[key];
 						changed = true;
@@ -272,7 +272,13 @@ export const editFrontmatterTool: MCPToolDefinition = {
 					};
 				}
 				const nextContent = mergeFrontmatter(buildFrontmatterBlock(nextFrontmatter), body);
-				await context.vault.modify(file as TFile, nextContent);
+				if (!file) {
+					return {
+						content: [{ type: "text", text: `Error: Note not found at path "${normalizedPath}"` }],
+						isError: true,
+					};
+				}
+				await context.vault.modify(file, nextContent);
 			}
 
 			return {

@@ -27,7 +27,7 @@ export function parseFrontmatterBlock(frontmatterBlock: string): { data: Record<
 	}
 
 	try {
-		const parsed = parseYaml(yamlBody);
+		const parsed = parseYaml(yamlBody) as unknown;
 		if (parsed == null) {
 			return { data: {}, hasFrontmatter: true };
 		}
