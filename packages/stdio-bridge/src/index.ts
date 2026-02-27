@@ -3,9 +3,14 @@
  */
 
 import { resolve as resolvePath } from "node:path";
-import { StdioBridgeServer } from "./bridge-server.js";
-import { PluginClient, PluginClientError, RetryExhaustedError } from "./plugin-client.js";
-import type { TransportMode } from "./types.js";
+import { McpProxyServer, V1BridgeServer } from "./bridge-server.js";
+import {
+	McpProxyClient,
+	PluginClientError,
+	RetryExhaustedError,
+	V1PluginClient,
+} from "./plugin-client.js";
+import type { BridgeClientConfig, TransportMode } from "./types.js";
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 3000;
@@ -46,19 +51,31 @@ function resolveBridgeConfig() {
 async function runCli() {
 	const { host, port, apiKey } = resolveBridgeConfig();
 	const transportMode = resolveTransportMode();
-	if ((transportMode === "auto" || transportMode === "mcp") && !apiKey) {
+	if (transportMode === "mcp" && !apiKey) {
 		console.error(
 			"[stdio-bridge] OBSIDIAN_MCP_API_KEY is empty. MCP endpoint authentication will fail until a key is configured."
 		);
 	}
-	const pluginClient = new PluginClient({
+	const clientConfig: BridgeClientConfig = {
 		host,
 		port,
 		timeout: 5000,
-		transportMode,
 		apiKey,
-	});
-	const server = new StdioBridgeServer(pluginClient);
+	};
+
+	let server: { start: () => Promise<void> };
+
+	if (transportMode === "mcp") {
+		server = new McpProxyServer(new McpProxyClient(clientConfig));
+	} else if (transportMode === "v1") {
+		server = new V1BridgeServer(new V1PluginClient(clientConfig));
+	} else {
+		const proxyClient = new McpProxyClient(clientConfig);
+		const mcpAvailable = await proxyClient.probeMcp();
+		server = mcpAvailable
+			? new McpProxyServer(proxyClient)
+			: new V1BridgeServer(new V1PluginClient(clientConfig));
+	}
 
 	try {
 		await server.start();
@@ -80,9 +97,15 @@ if (isMain) {
 }
 
 export default runCli;
-export { StdioBridgeServer, BridgeServer } from "./bridge-server.js";
-export { PluginClient, PluginClientError, RetryExhaustedError } from "./plugin-client.js";
+export { V1BridgeServer, McpProxyServer, StdioBridgeServer, BridgeServer } from "./bridge-server.js";
+export {
+	V1PluginClient,
+	McpProxyClient,
+	PluginClientError,
+	RetryExhaustedError,
+} from "./plugin-client.js";
 export type {
+	BridgeClientConfig,
 	PluginClientConfig,
 	MCPToolDefinition,
 	PollingState,

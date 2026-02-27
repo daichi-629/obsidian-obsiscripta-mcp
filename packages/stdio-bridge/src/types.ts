@@ -30,12 +30,15 @@ import type { MCPContent } from "@obsiscripta/shared";
 /**
  * Configuration for the plugin HTTP client
  */
-export interface PluginClientConfig {
+export interface BridgeClientConfig {
 	host: string;
 	port: number;
 	timeout: number;
-	transportMode: TransportMode;
 	apiKey: string;
+}
+
+export interface PluginClientConfig extends BridgeClientConfig {
+	transportMode: TransportMode;
 }
 
 /**

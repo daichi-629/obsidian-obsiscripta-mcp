@@ -3,7 +3,7 @@ import { BridgeServer } from '../../obsidian-plugin/src/mcp/server.js';
 import { ToolExecutor } from '../../obsidian-plugin/src/mcp/tools/executor.js';
 import { ToolRegistry, ToolSource } from '../../obsidian-plugin/src/mcp/tools/registry.js';
 import { validateAndConvertScriptExports } from '../../obsidian-plugin/src/mcp/tools/scripting/script-validator.js';
-import { PluginClient } from '../../stdio-bridge/src/plugin-client.js';
+import { V1PluginClient } from '../../stdio-bridge/src/plugin-client.js';
 import { StdioBridgeServer } from '../../stdio-bridge/src/bridge-server.js';
 import {
   FunctionRuntime,
@@ -111,9 +111,8 @@ describe('script-loader-core + ToolExecutor + BridgeServer + stdio-bridge full i
     await bridgeServer.start();
     cleanup.push(() => bridgeServer.stop());
 
-    const pluginClient = new PluginClient({
+    const pluginClient = new V1PluginClient({
       port,
-      transportMode: 'mcp',
       timeout: 1000,
       apiKey,
     });
