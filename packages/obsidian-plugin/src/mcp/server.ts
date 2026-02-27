@@ -13,6 +13,10 @@ import {
 
 export class BridgeServer {
 	private static readonly MAX_BODY_BYTES = 1024 * 1024;
+	private static readonly SUPPORTED_PROTOCOL_VERSIONS = new Set<string>([
+		"2025-03-26",
+		"2025-11-25",
+	]);
 	private httpServer: ServerType | null = null;
 	private sockets = new Set<Socket>();
 	private readonly executor: ToolExecutor;
@@ -98,6 +102,14 @@ export class BridgeServer {
 		return allowedHosts.has(origin.hostname);
 	}
 
+	private isSupportedProtocolVersion(versionHeader: string | undefined): boolean {
+		if (!versionHeader) {
+			return true;
+		}
+
+		return BridgeServer.SUPPORTED_PROTOCOL_VERSIONS.has(versionHeader);
+	}
+
 	/**
 	 * Create and configure Hono app
 	 */
@@ -135,9 +147,30 @@ export class BridgeServer {
 					return origin ?? undefined;
 				},
 				allowMethods: ["GET", "POST", "OPTIONS"],
-				allowHeaders: ["Content-Type", "Mcp-Session-Id", "Authorization", "X-ObsiScripta-Api-Key"],
+				allowHeaders: ["Content-Type", "Mcp-Session-Id", "Mcp-Protocol-Version", "Authorization", "X-ObsiScripta-Api-Key"],
 			}),
 		);
+
+		// Protocol version validation for MCP standard HTTP (POST only)
+		app.use("/mcp", async (c, next) => {
+			if (c.req.method !== "POST") {
+				return await next();
+			}
+
+			const versionHeader = c.req.header("mcp-protocol-version");
+			if (!this.isSupportedProtocolVersion(versionHeader)) {
+				return c.json(
+					{
+						error: "Unsupported protocol version",
+						message:
+							"Invalid or unsupported MCP-Protocol-Version header. Supported: 2025-03-26, 2025-11-25.",
+					},
+					400,
+				);
+			}
+
+			return await next();
+		});
 
 		app.use("/mcp", async (c, next) => {
 			if (c.req.method === "OPTIONS") {
@@ -193,6 +226,16 @@ export class BridgeServer {
 		});
 
 		// MCP Standard HTTP endpoint (JSON-RPC over HTTP)
+		app.get("/mcp", (c) => {
+			return c.json(
+				{
+					error: "Method not allowed",
+					message: "GET is not supported for MCP endpoint",
+				},
+				405,
+			);
+		});
+
 		app.post("/mcp", async (c) => {
 			// Parse request body
 			let body: unknown;
